@@ -1,0 +1,4 @@
+include config.example.yaml
+recursive-include docs *.md
+recursive-include examples *.md *.yaml *.json *.py
+include tests/browser_smoke.py

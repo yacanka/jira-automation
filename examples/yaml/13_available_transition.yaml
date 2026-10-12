@@ -1,0 +1,12 @@
+# Amaç: Geçiş kullanılabilirliğini sorgulama
+# Jira önkoşulu: Başlangıç statüsünde 31 geçişi açık olmalı.
+# Rehber: examples/README.md
+id: available_transition
+description: Geçiş kullanılabilirliğini sorgulama
+fixture:
+  issue_type: '10001'
+steps: []
+expect:
+- check: transition_available
+  id: '31'
+  value: true

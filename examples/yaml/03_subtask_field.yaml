@@ -1,0 +1,16 @@
+# Amaç: Subtask alan varlığını doğrula
+# Jira önkoşulu: Özel metin alanı subtask create ekranında bulunmalı.
+# Rehber: examples/README.md
+id: subtask_field
+description: Subtask alan varlığını doğrula
+fixture:
+  issue_type: '10002'
+  mode: none
+  catalog: artifacts/explorer/catalog.json
+steps: []
+expect:
+- check: catalog_exists
+  field: customfield_10012
+  screen: create
+  source: api
+  value: true

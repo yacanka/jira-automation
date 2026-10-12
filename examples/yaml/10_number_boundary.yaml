@@ -1,0 +1,20 @@
+# Amaç: Sayısal alt sınırı sınama
+# Jira önkoşulu: Özel sayısal alanın kabul edilen alt sınırı 0 olarak yapılandırılmalı.
+# Rehber: examples/README.md
+id: number_boundary
+description: Sayısal alt sınırı sınama
+fixture:
+  issue_type: '10001'
+steps:
+- action: open
+  screen: edit
+- action: fill
+  field: customfield_10011
+  value: 0
+- action: submit
+expect:
+- check: accepted
+  value: true
+- check: persisted
+  field: customfield_10011
+  value: 0

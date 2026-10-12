@@ -1,0 +1,20 @@
+# Amaç: Açıklama güncelleme
+# Jira önkoşulu: Description edit ekranında düzenlenebilir olmalı.
+# Rehber: examples/README.md
+id: edit_text
+description: Açıklama güncelleme
+fixture:
+  issue_type: '10001'
+steps:
+- action: open
+  screen: edit
+- action: fill
+  field: description
+  value: Güncellenen açıklama
+- action: submit
+expect:
+- check: accepted
+  value: true
+- check: persisted
+  field: description
+  value: Güncellenen açıklama

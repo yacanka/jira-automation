@@ -1,0 +1,16 @@
+# Amaç: Alan kimliğini katalogda doğrula
+# Jira önkoşulu: Create metadatası keşfedilmeli.
+# Rehber: examples/README.md
+id: find_field
+description: Alan kimliğini katalogda doğrula
+fixture:
+  issue_type: '10001'
+  mode: none
+  catalog: artifacts/explorer/catalog.json
+steps: []
+expect:
+- check: catalog_exists
+  field: summary
+  screen: create
+  source: api
+  value: true

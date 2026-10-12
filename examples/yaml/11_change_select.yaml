@@ -1,0 +1,21 @@
+# Amaç: Tek seçim alanını değiştirme
+# Jira önkoşulu: İkinci etiketli seçeneğin ID değeri 20002 olmalı.
+# Rehber: examples/README.md
+id: change_select
+description: Tek seçim alanını değiştirme
+fixture:
+  issue_type: '10001'
+steps:
+- action: open
+  screen: edit
+- action: fill
+  field: customfield_10010
+  value: İkinci
+- action: submit
+expect:
+- check: accepted
+  value: true
+- check: persisted
+  field: customfield_10010
+  value:
+    id: '20002'

@@ -1,0 +1,19 @@
+# Amaç: Boş summary ile oluşturma reddi
+# Jira önkoşulu: Summary zorunlu; hata metnini Jira diline uyarlayın.
+# Rehber: examples/README.md
+id: create_missing_required
+description: Boş summary ile oluşturma reddi
+fixture:
+  issue_type: '10001'
+  mode: none
+steps:
+- action: open
+  screen: create
+- action: clear
+  field: summary
+- action: submit
+expect:
+- check: accepted
+  value: false
+  field: summary
+  error_contains: required

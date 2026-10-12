@@ -1,0 +1,17 @@
+# Amaç: Seçim alanının seçenek kimliğini doğrula
+# Jira önkoşulu: 20001 seçeneği bulunmalı.
+# Rehber: examples/README.md
+id: allowed_options
+description: Seçim alanının seçenek kimliğini doğrula
+fixture:
+  issue_type: '10001'
+  mode: none
+  catalog: artifacts/explorer/catalog.json
+steps: []
+expect:
+- check: catalog_options
+  field: customfield_10010
+  screen: create
+  source: api
+  contains:
+    id: '20001'

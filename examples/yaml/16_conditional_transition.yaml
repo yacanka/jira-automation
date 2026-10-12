@@ -1,0 +1,17 @@
+# Amaç: Alan değerine bağlı geçiş
+# Jira önkoşulu: 41 koşulu Onaylandı değeri; hedef statü 10004 olmalı.
+# Rehber: examples/README.md
+id: conditional_transition
+description: Alan değerine bağlı geçiş
+fixture:
+  issue_type: '10001'
+  fields:
+    customfield_10012: Onaylandı
+steps:
+- action: transition
+  id: '41'
+expect:
+- check: accepted
+  value: true
+- check: status
+  value: '10004'

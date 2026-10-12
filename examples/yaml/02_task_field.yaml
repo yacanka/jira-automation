@@ -1,0 +1,16 @@
+# Amaç: Task alan varlığını doğrula
+# Jira önkoşulu: Özel metin alanı task create ekranında bulunmalı.
+# Rehber: examples/README.md
+id: task_field
+description: Task alan varlığını doğrula
+fixture:
+  issue_type: '10001'
+  mode: none
+  catalog: artifacts/explorer/catalog.json
+steps: []
+expect:
+- check: catalog_exists
+  field: customfield_10012
+  screen: create
+  source: api
+  value: true

@@ -1,0 +1,23 @@
+# Amaç: Subtask zorunlu alan eksikliği
+# Jira önkoşulu: Subtask summary zorunlu; hata metnini uyarlayın.
+# Rehber: examples/README.md
+id: subtask_required
+description: Subtask zorunlu alan eksikliği
+fixture:
+  issue_type: '10002'
+  mode: none
+  parent:
+    issue_type: '10001'
+    fields:
+      summary: Parent örneği
+steps:
+- action: open
+  screen: create
+- action: clear
+  field: summary
+- action: submit
+expect:
+- check: accepted
+  value: false
+  field: summary
+  error_contains: required

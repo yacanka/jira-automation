@@ -1,0 +1,25 @@
+# Amaç: Geçersiz sayıyla subtask düzenleme reddi
+# Jira önkoşulu: Negatif sayıyı edit işleminde reddeden sunucu kuralı yapılandırılmalı.
+# Rehber: examples/README.md
+id: reject_subtask_edit
+description: Geçersiz sayıyla subtask düzenleme reddi
+fixture:
+  issue_type: '10002'
+  parent:
+    issue_type: '10001'
+    fields:
+      summary: Parent örneği
+  fields:
+    customfield_10011: 1
+steps:
+- action: open
+  screen: edit
+- action: fill
+  field: customfield_10011
+  value: -1
+- action: submit
+expect:
+- check: accepted
+  value: false
+  field: customfield_10011
+  error_contains: minimum

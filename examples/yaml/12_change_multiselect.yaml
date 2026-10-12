@@ -1,0 +1,24 @@
+# Amaç: Çoklu seçim alanını değiştirme
+# Jira önkoşulu: Seçenek etiketleri ve API liste sırası uyarlanmalı.
+# Rehber: examples/README.md
+id: change_multiselect
+description: Çoklu seçim alanını değiştirme
+fixture:
+  issue_type: '10001'
+steps:
+- action: open
+  screen: edit
+- action: fill
+  field: customfield_10013
+  value:
+  - Birinci
+  - İkinci
+- action: submit
+expect:
+- check: accepted
+  value: true
+- check: persisted
+  field: customfield_10013
+  value:
+  - id: '20001'
+  - id: '20002'

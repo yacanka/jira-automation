@@ -1,0 +1,25 @@
+# Copy to config.local.yaml. Credentials belong in environment variables only.
+base_url: https://jira.example.test/jira
+source_project: DEMO
+test_project: AUTOTEST
+browser: chrome
+headless: false
+timeout: 20
+verify_tls: true
+artifact_dir: artifacts
+sample_limit: 100
+screenshots: false
+# driver_path: /absolute/path/to/chromedriver
+# verify_tls: /absolute/path/to/company-ca.pem
+# Add non-secret API values required to create test fixtures:
+default_fields: {}
+# Optional explicit source project issue samples, grouped by issue type ID:
+samples: {}
+#  "10001": [DEMO-1, DEMO-2]
+# CSS overrides for your Jira version/theme. Omit these to use the defaults:
+locators: {}
+#  create.customfield_10012: '[id="customfield_10012"]'
+#  edit.description: 'iframe[id="description-wysiwyg"]'
+#  transition.customfield_10012.error: '#customfield_10012-error'
+#  create.project_identity: '#project'
+#  create.type_identity: '#issuetype'

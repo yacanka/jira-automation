@@ -1,0 +1,20 @@
+# Amaç: Opsiyonel alanı boş bırakma
+# Jira önkoşulu: Description opsiyonel, boş API değeri null olmalı.
+# Rehber: examples/README.md
+id: optional_empty
+description: Opsiyonel alanı boş bırakma
+fixture:
+  issue_type: '10001'
+  mode: none
+steps:
+- action: open
+  screen: create
+- action: clear
+  field: description
+- action: submit
+expect:
+- check: accepted
+  value: true
+- check: persisted
+  field: description
+  value: null

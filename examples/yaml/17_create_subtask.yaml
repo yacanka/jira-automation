@@ -1,0 +1,25 @@
+# Amaç: Parent ile subtask oluşturma
+# Jira önkoşulu: 10002 subtask türü ve oluşturma yetkileri sağlanmalı.
+# Rehber: examples/README.md
+id: create_subtask
+description: Parent ile subtask oluşturma
+fixture:
+  issue_type: '10002'
+  mode: none
+  parent:
+    issue_type: '10001'
+    fields:
+      summary: Parent örneği
+steps:
+- action: open
+  screen: create
+- action: fill
+  field: description
+  value: Subtask örneği
+- action: submit
+expect:
+- check: accepted
+  value: true
+- check: persisted
+  field: description
+  value: Subtask örneği

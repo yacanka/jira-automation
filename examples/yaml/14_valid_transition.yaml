@@ -1,0 +1,20 @@
+# Amaç: Dolu alanla workflow geçişi
+# Jira önkoşulu: 31 ekranında özel metin alanı bulunmalı; hedef statü 10003 olmalı.
+# Rehber: examples/README.md
+id: valid_transition
+description: Dolu alanla workflow geçişi
+fixture:
+  issue_type: '10001'
+steps:
+- action: transition
+  id: '31'
+  fields:
+    customfield_10012: Hazır
+expect:
+- check: accepted
+  value: true
+- check: status
+  value: '10003'
+- check: persisted
+  field: customfield_10012
+  value: Hazır

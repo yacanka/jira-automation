@@ -1,0 +1,21 @@
+# Amaç: Geçerli alanlarla task oluşturma
+# Jira önkoşulu: Gerekli default_fields ve oluşturma yetkisi sağlanmalı.
+# Rehber: examples/README.md
+id: create_valid
+description: Geçerli alanlarla task oluşturma
+fixture:
+  issue_type: '10001'
+  mode: none
+steps:
+- action: open
+  screen: create
+- action: fill
+  field: description
+  value: Geçerli oluşturma örneği
+- action: submit
+expect:
+- check: accepted
+  value: true
+- check: persisted
+  field: description
+  value: Geçerli oluşturma örneği

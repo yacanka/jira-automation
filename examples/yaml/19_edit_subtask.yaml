@@ -1,0 +1,24 @@
+# Amaç: Subtask düzenleme kabulü
+# Jira önkoşulu: Subtask açıklaması düzenlenebilir olmalı.
+# Rehber: examples/README.md
+id: edit_subtask
+description: Subtask düzenleme kabulü
+fixture:
+  issue_type: '10002'
+  parent:
+    issue_type: '10001'
+    fields:
+      summary: Parent örneği
+steps:
+- action: open
+  screen: edit
+- action: fill
+  field: description
+  value: Düzenlenmiş subtask
+- action: submit
+expect:
+- check: accepted
+  value: true
+- check: persisted
+  field: description
+  value: Düzenlenmiş subtask

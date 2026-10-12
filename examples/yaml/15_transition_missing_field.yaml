@@ -1,0 +1,23 @@
+# Amaç: Boş zorunlu alanla geçiş reddi
+# Jira önkoşulu: 31 ekranındaki alan zorunlu; başlangıç statüsü 10000 olmalı.
+# Rehber: examples/README.md
+id: transition_missing_field
+description: Boş zorunlu alanla geçiş reddi
+fixture:
+  issue_type: '10001'
+  fields:
+    customfield_10012: Hazır
+steps:
+- action: open
+  screen: transition
+  transition: '31'
+- action: clear
+  field: customfield_10012
+- action: submit
+expect:
+- check: accepted
+  value: false
+  field: customfield_10012
+  error_contains: required
+- check: status
+  value: '10000'
