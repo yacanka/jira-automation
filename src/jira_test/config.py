@@ -44,8 +44,8 @@ class Config:
                 raise ConfigurationError("Project keys must be Jira project keys")
         if self.source_project.upper() == self.test_project.upper():
             raise ConfigurationError("Source and test projects must be different")
-        if self.browser not in {"chrome", "firefox"}:
-            raise ConfigurationError("browser must be chrome or firefox")
+        if self.browser not in {"chrome", "firefox", "edge"}:
+            raise ConfigurationError("browser must be chrome, firefox or edge")
         if not isinstance(self.timeout, (int, float)) or self.timeout <= 0:
             raise ConfigurationError("timeout must be positive")
         if not isinstance(self.sample_limit, int) or self.sample_limit < 1:

@@ -2,15 +2,16 @@
 base_url: https://jira.example.test/jira
 source_project: DEMO
 test_project: AUTOTEST
-browser: chrome
+browser: chrome # chrome, firefox or edge
 headless: false
 timeout: 20
 verify_tls: true
 artifact_dir: artifacts
 sample_limit: 100
 screenshots: false
-# driver_path: /absolute/path/to/chromedriver
-# verify_tls: /absolute/path/to/company-ca.pem
+# Optional Windows paths; driver must match the selected browser:
+# driver_path: 'C:/Tools/msedgedriver.exe'
+# verify_tls: 'C:/Certificates/company-ca.pem'
 # Add non-secret API values required to create test fixtures:
 default_fields: {}
 # Optional explicit source project issue samples, grouped by issue type ID:

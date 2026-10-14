@@ -1,5 +1,12 @@
 # Kullanım ve senaryo referansı
 
+Windows'ta repo kökünde çalışın. `bat` blokları CMD komutlarıdır; yeni
+CMD penceresinde önce `call .venv\Scripts\activate.bat` çalıştırın.
+`python` blokları [README](../README.md) içindeki `main` importunu ve gizli parola
+girişini yaptığınız **aynı Python konsolunda** çalıştırılır. Python konsolundan
+çıkmak için `exit()` yazın; yeniden açtığınızda kimlik bilgilerini tekrar girin.
+Python'a verilen `examples/yaml` gibi yollar Windows'ta da geçerlidir.
+
 ## 1. Ortamı doğrulayın
 
 `config.example.yaml` dosyasını kopyalayın. Kaynak proje salt okunur keşif içindir;
@@ -7,17 +14,17 @@
 issue türü, ekran, alan, workflow ve izin yapılandırmasını kaynakla eşlemelidir.
 Sistem Jira yapılandırması veya proje oluşturmaz.
 
-`jira-test doctor --config config.local.yaml` API kimliğini, sürümü, proje erişimini,
+`main(["doctor", "--config", "config.local.yaml"])` API kimliğini, sürümü, proje erişimini,
 oluşturma metadatasını, yetkileri ve tarayıcı girişini denetler. Yalnız API kontrolü
-istiyorsanız `--api-only` ekleyin. CAPTCHA, MFA, SSO veya basic auth engeli varsa
+istiyorsanız argüman listesine `"--api-only"` ekleyin. CAPTCHA, MFA, SSO veya basic auth engeli varsa
 kurumunuzun izin verdiği test hesabı/giriş yöntemi gerekir; sistem bunları aşmaz.
 
 ## 2. Kataloğu oluşturun
 
-```sh
-jira-test explore --config config.local.yaml --project DEMO
-jira-test explore --config config.local.yaml --project AUTOTEST --output artifacts/test-catalog
-jira-test explore --config config.local.yaml --api-only
+```python
+main(['explore', '--config', 'config.local.yaml', '--project', 'DEMO'])
+main(['explore', '--config', 'config.local.yaml', '--project', 'AUTOTEST', '--output', 'artifacts/test-catalog'])
+main(['explore', '--config', 'config.local.yaml', '--api-only'])
 ```
 
 Davranış testlerinde kullanılacak kimlikleri test projesi kataloğundan seçin.
@@ -37,9 +44,8 @@ butonlarını çalıştırmaz. Şema, görünmeyen statüler ve validator'lar bi
 
 HTML rapor dış servis çağırmadan yerel açılır; kimlikler JSON'da da bulunur:
 
-```sh
-jira-test query --catalog artifacts/test-catalog/catalog.json \
-  --issue-type 10001 --screen transition --transition 31 --field customfield_10012
+```bat
+python -m jira_test query --catalog artifacts/test-catalog/catalog.json --issue-type 10001 --screen transition --transition 31 --field customfield_10012
 ```
 
 Eski snapshot güncel Jira davranışının kanıtı değildir; yapılandırma değişince yeniden keşfedin.
@@ -146,10 +152,9 @@ ve Jira dokümantasyonu üzerinden uyarlayın.
 
 ## 4. Çalıştırma ve sonuçlar
 
-```sh
-jira-test validate --suite my-scenarios
-jira-test run --suite my-scenarios --config config.local.yaml \
-  --test-project AUTOTEST --catalog artifacts/test-catalog/catalog.json
+```python
+main(['validate', '--suite', 'my-scenarios'])
+main(['run', '--suite', 'my-scenarios', '--config', 'config.local.yaml', '--test-project', 'AUTOTEST', '--catalog', 'artifacts/test-catalog/catalog.json'])
 ```
 
 Exit code 0 tüm toplanan testlerin geçtiğini gösterir. Engellenen YAML senaryoları pytest'te

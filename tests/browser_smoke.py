@@ -1,6 +1,6 @@
 """Explicit local Selenium tests, independent of a Jira instance.
 
-Run: SE_CACHE_PATH=$PWD/.selenium .venv/bin/pytest tests/browser_smoke.py -q
+Run with the virtual environment Python: python -m pytest tests/browser_smoke.py -q
 Requires installed Chrome and a compatible local driver or Selenium Manager access.
 """
 

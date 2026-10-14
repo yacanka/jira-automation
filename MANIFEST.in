@@ -1,4 +1,5 @@
 include config.example.yaml
+include run-demo.bat
 recursive-include docs *.md
 recursive-include examples *.md *.yaml *.json *.py
 include tests/browser_smoke.py

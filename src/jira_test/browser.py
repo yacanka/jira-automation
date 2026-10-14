@@ -5,6 +5,7 @@ from urllib.parse import urlsplit
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
+from selenium.webdriver.edge.service import Service as EdgeService
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.support import expected_conditions as EC
@@ -31,6 +32,15 @@ class Browser:
             options.add_argument("--window-size=1440,1000")
             self.driver = webdriver.Chrome(
                 options=options, service=ChromeService(executable_path=self.config.driver_path)
+            )
+        elif self.config.browser == "edge":
+            edge_options = webdriver.EdgeOptions()
+            if self.config.headless:
+                edge_options.add_argument("--headless=new")
+            edge_options.add_argument("--window-size=1440,1000")
+            self.driver = webdriver.Edge(
+                options=edge_options,
+                service=EdgeService(executable_path=self.config.driver_path),
             )
         else:
             firefox_options = webdriver.FirefoxOptions()

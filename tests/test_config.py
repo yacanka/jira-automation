@@ -4,6 +4,27 @@ from jira_test.config import Config
 from jira_test.errors import ConfigurationError
 
 
+@pytest.mark.parametrize("browser", ["chrome", "firefox", "edge"])
+def test_supported_browser_loads_from_yaml(tmp_path, browser):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "base_url: https://jira.test\nsource_project: SRC\ntest_project: TST\n"
+        f"browser: {browser}\n",
+        encoding="utf-8",
+    )
+    assert Config.load(path).browser == browser
+
+
+def test_unsupported_browser_rejected():
+    with pytest.raises(ConfigurationError):
+        Config(
+            base_url="https://jira.test",
+            source_project="SRC",
+            test_project="TST",
+            browser="safari",
+        )
+
+
 def test_credentials_are_environment_only(tmp_path, monkeypatch):
     path = tmp_path / "config.yaml"
     path.write_text(

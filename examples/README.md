@@ -1,6 +1,13 @@
 # Öğretici örnekler
 
-Bu örnekler gerçek Jira verisi içermez. Önce `jira-test explore` ile test projenizi
+Windows'ta repo kökünde çalışın. `bat` blokları CMD komutlarıdır; yeni
+CMD penceresinde önce `call .venv\Scripts\activate.bat` çalıştırın.
+`python` blokları [README](../README.md) içindeki `main` importunu ve gizli parola
+girişini yaptığınız **aynı Python konsolunda** çalıştırılır. Python konsolundan
+çıkmak için `exit()` yazın; yeniden açtığınızda kimlik bilgilerini tekrar girin.
+Python'a verilen `examples/yaml` gibi yollar Windows'ta da geçerlidir.
+
+Bu örnekler gerçek Jira verisi içermez. Önce `python -m jira_test explore` ile test projenizi
 keşfedin, sonra örnekleri bir çalışma dizinine kopyalayıp kimlik ve kuralları değiştirin.
 Hiçbir örnek kaynak projeye yazmaz; oluşturulan test kayıtları otomatik silinmez.
 
@@ -27,10 +34,9 @@ Jira dilinize uyarlayın; `required` ve `minimum` örnek metin parçalarıdır.
 
 Her satır bağımsız bir senaryodur. Ortak çalıştırma biçimi:
 
-```sh
-jira-test validate --suite my-scenarios
-jira-test run --suite my-scenarios/09_edit_text.yaml \
-  --config config.local.yaml --test-project AUTOTEST
+```python
+main(['validate', '--suite', 'my-scenarios'])
+main(['run', '--suite', 'my-scenarios/09_edit_text.yaml', '--config', 'config.local.yaml', '--test-project', 'AUTOTEST'])
 ```
 
 | No | Dosya | Amaç / önkoşul | Beklenen sonuç |
@@ -60,15 +66,16 @@ Her dosyanın başındaki yorumlar ilgili önkoşulu tekrar belirtir. İlk beş 
 katalog sorgularıdır; canlı bağlantı gerektirmez. `demo-catalog.json` bunlar için
 sentetik veri sağlar:
 
-```sh
-jira-test run --suite examples/yaml/05_required_metadata.yaml \
-  --catalog examples/demo-catalog.json
+```bat
+python -m jira_test run --suite examples/yaml/05_required_metadata.yaml --catalog examples/demo-catalog.json
 ```
 
 ## Python örnekleri
 
-```sh
-pytest examples/python/test_01_components.py --jira-config config.local.yaml
+```python
+import subprocess
+import sys
+subprocess.call([sys.executable, '-m', 'pytest', 'examples/python/test_01_components.py', '--jira-config', 'config.local.yaml'])
 ```
 
 1. **test_01_components:** doğrudan UI komponentleri ve REST sonucu; Task/description gerekir.
