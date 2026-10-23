@@ -144,13 +144,17 @@ class JiraClient:
         fields = dict(fields)
         fields["summary"] = self.summary(str(fields.get("summary", "fixture")))
         created = self._request("POST", "issue", json={"fields": fields})
-        self._created.add(created["key"])
+        self.record_created(created["key"])
         self.register_created(created["key"])
         return created
 
     def summary(self, text: str) -> str:
         prefix = f"[jira-test:{self.run_id}] "
         return text if text.startswith(prefix) else prefix + text
+
+    def record_created(self, key: str) -> None:
+        """Retain creation evidence even if verification fails; never grant write ownership."""
+        self._created.add(key)
 
     def register_created(self, key: str) -> None:
         record = self.issue(key)

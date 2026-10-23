@@ -81,7 +81,11 @@ def _operations(items: Any, key: str, definitions: dict) -> None:
     if not isinstance(items, list):
         _fail(f"{key} entries must be a list")
     for item in items:
-        if not isinstance(item, dict) or item.get(key) not in definitions:
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get(key), str)
+            or item[key] not in definitions
+        ):
             _fail(f"Unknown {key}")
         allowed, required = definitions[item[key]]
         if set(item) - (allowed | {key}) or required - set(item):
@@ -89,15 +93,21 @@ def _operations(items: Any, key: str, definitions: dict) -> None:
         for name in ("field", "id", "transition"):
             if name in item:
                 _identifier(item[name], name)
-        if "screen" in item and item["screen"] not in {"create", "view", "edit", "transition"}:
+        if "screen" in item and item["screen"] not in ("create", "view", "edit", "transition"):
             _fail("Unknown screen")
-        if "source" in item and item["source"] not in {"api", "ui"}:
+        if "source" in item and item["source"] not in ("api", "ui"):
             _fail("source must be api or ui")
         if item.get("action") == "open" and item["screen"] == "transition":
             _identifier(item.get("transition"), "transition")
         if "fields" in item and not isinstance(item["fields"], dict):
             _fail("fields must be a mapping")
         check = item.get("check", "")
+        if "error_contains" in item:
+            _identifier(item["error_contains"], "error_contains")
+        if "status" in item:
+            _status(item["status"], "status")
+        if check == "status":
+            _status(item["value"], "status.value")
         if check in {
             "visible",
             "editable",
@@ -136,8 +146,10 @@ def validate(data: Any) -> Scenario:
     }:
         _fail("Invalid fixture settings")
     _identifier(fixture.get("issue_type"), "issue_type")
-    if fixture.get("mode", "new") not in {"new", "none"}:
+    if fixture.get("mode", "new") not in ("new", "none"):
         _fail("fixture.mode must be new or none")
+    if "catalog" in fixture:
+        _identifier(fixture["catalog"], "fixture.catalog")
     if not isinstance(fixture.get("fields", {}), dict):
         _fail("fixture.fields must be a mapping")
     if {"project", "parent", "issuetype"} & fixture.get("fields", {}).keys():
@@ -159,11 +171,14 @@ def validate(data: Any) -> Scenario:
         if not isinstance(hop, dict) or set(hop) - {"id", "fields", "status"}:
             _fail("Invalid fixture transition path")
         _identifier(hop.get("id"), "path.id")
+        if "status" in hop:
+            _status(hop["status"], "path.status")
         if not isinstance(hop.get("fields", {}), dict):
             _fail("path.fields must be a mapping")
     _operations(data["steps"], "action", ACTIONS)
     _operations(data["expect"], "check", CHECKS)
-    _validate_order(data["steps"])
+    screen = _validate_order(data["steps"])
+    _validate_expectations(data, screen)
     if not data["expect"]:
         _fail("Every scenario must assert an expectation")
     if not isinstance(data.get("description", ""), str):
@@ -185,7 +200,30 @@ def load_scenarios(path: Path | str) -> list[Scenario]:
     return scenarios
 
 
-def _validate_order(steps: list[dict]) -> None:
+def _status(value: Any, name: str) -> None:
+    # Numeric status IDs remain accepted for compatibility with the runner's coercion.
+    if type(value) is int:
+        return
+    _identifier(value, name)
+
+
+def _validate_expectations(data: dict, screen: str | None) -> None:
+    submitted = any(step["action"] in {"submit", "transition"} for step in data["steps"])
+    for index, expected in enumerate(data["expect"], 1):
+        check = expected["check"]
+        if check in {"visible", "editable", "required"} and screen is None:
+            _fail(f"expect[{index}]: {check} requires an explicitly open screen")
+        if check == "accepted" and not submitted:
+            _fail(f"expect[{index}]: accepted requires a preceding submit/transition")
+        if (
+            check in {"persisted", "status", "transition_available"}
+            and data["fixture"].get("mode", "new") == "none"
+            and not submitted
+        ):
+            _fail(f"expect[{index}]: {check} requires an issue fixture or create submission")
+
+
+def _validate_order(steps: list[dict]) -> str | None:
     screen = None
     for step in steps:
         action = step["action"]
@@ -198,3 +236,4 @@ def _validate_order(steps: list[dict]) -> None:
                 _fail("Open an editable form before fill, clear or submit")
             if action == "submit":
                 screen = None
+    return screen

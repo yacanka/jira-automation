@@ -126,3 +126,25 @@ def test_run_launches_pytest_in_a_clean_process(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "launch_pytest", launch)
     assert main(["run", "--suite", str(case), "--junit", str(tmp_path / "junit.xml")]) == 0
     assert calls[0][:3] == [sys.executable, "-m", "pytest"]
+
+
+def test_playwright_error_is_sanitized():
+    from playwright.sync_api import Error
+
+    from jira_test.pytest_plugin import safe_error
+
+    message = safe_error(Error("private page content and locator call log"))
+    assert "private page content" not in message
+    assert "locators" in message
+
+
+def test_screenshot_failure_does_not_replace_test_failure():
+    from unittest.mock import Mock
+
+    from playwright.sync_api import Error
+
+    from jira_test.pytest_plugin import capture_evidence
+
+    session = Mock()
+    session.screenshot.side_effect = Error("private page URL")
+    assert capture_evidence(session) == {"evidence_error": "Browser screenshot unavailable"}

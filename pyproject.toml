@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "jira-test-automation"
 version = "0.1.0"
-description = "Component-based Jira Data Center explorer and Selenium test toolkit"
+description = "Component-based Jira Data Center explorer and Playwright test toolkit"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["selenium>=4.27,<5", "pytest>=8,<10", "requests>=2.32,<3", "PyYAML>=6,<7"]
+dependencies = ["playwright>=1.51,<2", "pytest>=8,<10", "requests>=2.32,<3", "PyYAML>=6,<7"]
 
 [project.optional-dependencies]
 dev = ["ruff>=0.8", "mypy>=1.13", "build>=1.2", "types-PyYAML", "types-requests"]
@@ -37,3 +37,6 @@ select = ["E", "F", "I", "B", "UP"]
 python_version = "3.11"
 check_untyped_defs = true
 no_implicit_optional = true
+
+[tool.setuptools.package-data]
+"jira_test.gui" = ["data/*.json", "data/*.yaml"]

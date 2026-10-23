@@ -1,4 +1,7 @@
+import pytest
+
 from jira_test.catalog import Catalog, Observation
+from jira_test.errors import ConfigurationError
 from jira_test.report import render_catalog
 
 
@@ -47,3 +50,11 @@ def test_catalog_roundtrip_and_unknown_context(tmp_path):
     restored = Catalog.load(path)
     assert restored.query(field="customfield_42") == []
     assert restored.gaps == catalog.gaps
+
+
+@pytest.mark.parametrize("content", ["[]", "null", '"catalog"'])
+def test_catalog_root_must_be_an_object(tmp_path, content):
+    path = tmp_path / "catalog.json"
+    path.write_text(content)
+    with pytest.raises(ConfigurationError, match="Invalid catalog JSON"):
+        Catalog.load(path)

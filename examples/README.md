@@ -35,8 +35,18 @@ Jira dilinize uyarlayın; `required` ve `minimum` örnek metin parçalarıdır.
 Her satır bağımsız bir senaryodur. Ortak çalıştırma biçimi:
 
 ```python
-main(['validate', '--suite', 'my-scenarios'])
-main(['run', '--suite', 'my-scenarios/09_edit_text.yaml', '--config', 'config.local.yaml', '--test-project', 'AUTOTEST'])
+main(["validate", "--suite", "my-scenarios"])
+main(
+    [
+        "run",
+        "--suite",
+        "my-scenarios/09_edit_text.yaml",
+        "--config",
+        "config.local.yaml",
+        "--test-project",
+        "AUTOTEST",
+    ]
+)
 ```
 
 | No | Dosya | Amaç / önkoşul | Beklenen sonuç |
@@ -75,7 +85,17 @@ python -m jira_test run --suite examples/yaml/05_required_metadata.yaml --catalo
 ```python
 import subprocess
 import sys
-subprocess.call([sys.executable, '-m', 'pytest', 'examples/python/test_01_components.py', '--jira-config', 'config.local.yaml'])
+
+subprocess.call(
+    [
+        sys.executable,
+        "-m",
+        "pytest",
+        "examples/python/test_01_components.py",
+        "--jira-config",
+        "config.local.yaml",
+    ]
+)
 ```
 
 1. **test_01_components:** doğrudan UI komponentleri ve REST sonucu; Task/description gerekir.

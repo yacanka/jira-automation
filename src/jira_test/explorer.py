@@ -1,8 +1,9 @@
 """Read-only project exploration. Missing contexts remain explicit coverage gaps."""
 
+from collections.abc import Callable
 from typing import Any
 
-from selenium.common.exceptions import WebDriverException
+from playwright.sync_api import Error as PlaywrightError
 
 from .catalog import Catalog, Observation
 from .config import Config
@@ -20,11 +21,26 @@ def normalize_fields(fields: list[dict] | dict) -> dict[str, dict]:
 
 
 class Explorer:
-    def __init__(self, config: Config, client: Any):
+    def __init__(
+        self,
+        config: Config,
+        client: Any,
+        event_sink: Callable[[dict], None] | None = None,
+        cancel_check: Callable[[], None] | None = None,
+    ):
         self.config = config
         self.client = client
+        self.event_sink = event_sink
+        self.cancel_check = cancel_check
+
+    def _checkpoint(self, phase: str, **data: Any) -> None:
+        if self.cancel_check:
+            self.cancel_check()
+        if self.event_sink:
+            self.event_sink({"phase": phase, **data})
 
     def discover(self, project: str, ui: Any = None) -> Catalog:
+        self._checkpoint("discovery_start", project=project)
         catalog = Catalog(project=project, user="configured-user")
         catalog.issue_types = self.client.issue_types(project)
         try:
@@ -38,6 +54,7 @@ class Explorer:
             )
         for issue_type in catalog.issue_types:
             type_id = str(issue_type["id"])
+            self._checkpoint("issue_type", issue_type=type_id)
             try:
                 fields = normalize_fields(self.client.create_fields(project, type_id))
                 self._add_fields(catalog, type_id, "create", fields)
@@ -75,9 +92,10 @@ class Explorer:
                     )
                 # Distinct statuses do not imply identical field contexts, so inspect each sample.
                 for sample in samples:
+                    self._checkpoint("sample", issue=sample["key"])
                     try:
                         self._issue_context(catalog, ui, project, type_id, sample, global_fields)
-                    except (JiraTestError, WebDriverException) as exc:
+                    except (JiraTestError, PlaywrightError) as exc:
                         catalog.gaps.append(
                             {"issue": sample["key"], "reason": self._safe_reason(exc)}
                         )
@@ -88,7 +106,7 @@ class Explorer:
                             "reason": "Sample limit reached; discovery is bounded",
                         }
                     )
-            except (JiraTestError, WebDriverException) as exc:
+            except (JiraTestError, PlaywrightError) as exc:
                 catalog.gaps.append({"issue_type": type_id, "reason": self._safe_reason(exc)})
         catalog.gaps.append(
             {
@@ -153,6 +171,7 @@ class Explorer:
             status=status,
         )
         for transition in self.client.transitions(key):
+            self._checkpoint("transition", issue=key, transition=str(transition["id"]))
             tid = str(transition["id"])
             catalog.transitions.append(
                 {
@@ -214,7 +233,7 @@ class Explorer:
             for observation in ui.observe(metadata):
                 observation.status = status
                 catalog.add(observation)
-        except (JiraTestError, WebDriverException) as exc:
+        except (JiraTestError, PlaywrightError) as exc:
             catalog.gaps.append({**context, "status": status, "reason": self._safe_reason(exc)})
         finally:
             ui.cancel()

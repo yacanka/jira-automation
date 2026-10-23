@@ -1,0 +1,163 @@
+{
+  "project": "DEMO",
+  "user": "synthetic-demo",
+  "observations": [
+    {
+      "issue_type": "10001",
+      "screen": "create",
+      "field": "summary",
+      "source": "api",
+      "name": "Summary",
+      "schema": {
+        "type": "string",
+        "system": "summary"
+      },
+      "required": true,
+      "visible": null,
+      "editable": null,
+      "options": [],
+      "locator": null,
+      "issue": null,
+      "status": null,
+      "transition": null,
+      "observed_at": "2026-10-12T07:55:07.455407+00:00"
+    },
+    {
+      "issue_type": "10001",
+      "screen": "create",
+      "field": "customfield_10012",
+      "source": "api",
+      "name": "Özel metin",
+      "schema": {
+        "type": "string",
+        "custom": "com.atlassian.jira.plugin.system.customfieldtypes:textfield"
+      },
+      "required": false,
+      "visible": null,
+      "editable": null,
+      "options": [],
+      "locator": null,
+      "issue": null,
+      "status": null,
+      "transition": null,
+      "observed_at": "2026-10-12T07:55:07.455412+00:00"
+    },
+    {
+      "issue_type": "10001",
+      "screen": "create",
+      "field": "customfield_10010",
+      "source": "api",
+      "name": "Seçim",
+      "schema": {
+        "type": "option",
+        "custom": "com.atlassian.jira.plugin.system.customfieldtypes:select"
+      },
+      "required": false,
+      "visible": null,
+      "editable": null,
+      "options": [
+        {
+          "id": "20001",
+          "value": "Birinci"
+        },
+        {
+          "id": "20002",
+          "value": "İkinci"
+        }
+      ],
+      "locator": null,
+      "issue": null,
+      "status": null,
+      "transition": null,
+      "observed_at": "2026-10-12T07:55:07.455415+00:00"
+    },
+    {
+      "issue_type": "10002",
+      "screen": "create",
+      "field": "summary",
+      "source": "api",
+      "name": "Summary",
+      "schema": {
+        "type": "string",
+        "system": "summary"
+      },
+      "required": true,
+      "visible": null,
+      "editable": null,
+      "options": [],
+      "locator": null,
+      "issue": null,
+      "status": null,
+      "transition": null,
+      "observed_at": "2026-10-12T07:55:07.455418+00:00"
+    },
+    {
+      "issue_type": "10002",
+      "screen": "create",
+      "field": "customfield_10012",
+      "source": "api",
+      "name": "Özel metin",
+      "schema": {
+        "type": "string",
+        "custom": "com.atlassian.jira.plugin.system.customfieldtypes:textfield"
+      },
+      "required": false,
+      "visible": null,
+      "editable": null,
+      "options": [],
+      "locator": null,
+      "issue": null,
+      "status": null,
+      "transition": null,
+      "observed_at": "2026-10-12T07:55:07.455420+00:00"
+    },
+    {
+      "issue_type": "10002",
+      "screen": "create",
+      "field": "customfield_10010",
+      "source": "api",
+      "name": "Seçim",
+      "schema": {
+        "type": "option",
+        "custom": "com.atlassian.jira.plugin.system.customfieldtypes:select"
+      },
+      "required": false,
+      "visible": null,
+      "editable": null,
+      "options": [
+        {
+          "id": "20001",
+          "value": "Birinci"
+        },
+        {
+          "id": "20002",
+          "value": "İkinci"
+        }
+      ],
+      "locator": null,
+      "issue": null,
+      "status": null,
+      "transition": null,
+      "observed_at": "2026-10-12T07:55:07.455422+00:00"
+    }
+  ],
+  "transitions": [],
+  "issue_types": [
+    {
+      "id": "10001",
+      "name": "Task"
+    },
+    {
+      "id": "10002",
+      "name": "Subtask",
+      "subtask": true
+    }
+  ],
+  "gaps": [
+    {
+      "reason": "Synthetic demo: not evidence about a live Jira instance"
+    }
+  ],
+  "created_at": "2026-10-12T07:55:07.455337+00:00",
+  "version": 1
+}

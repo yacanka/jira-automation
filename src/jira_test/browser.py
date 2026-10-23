@@ -1,15 +1,10 @@
-"""WebDriver lifecycle and Jira username/password login with explicit waits."""
+"""Playwright lifecycle and Jira username/password login with explicit waits."""
 
+from collections.abc import Callable
 from urllib.parse import urlsplit
 
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.common.by import By
-from selenium.webdriver.edge.service import Service as EdgeService
-from selenium.webdriver.firefox.service import Service as FirefoxService
-from selenium.webdriver.remote.webdriver import WebDriver
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
+from playwright.sync_api import Browser as PlaywrightBrowser
+from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwright
 
 from .components import LocatorMap
 from .config import Config
@@ -17,74 +12,95 @@ from .errors import ConfigurationError, WriteBoundaryError
 
 
 class Browser:
-    def __init__(self, config: Config, driver: WebDriver | None = None):
+    def __init__(self, config: Config, page: Page | None = None):
         self.config = config
-        self.driver = driver
+        self.page = page
         self.locators = LocatorMap(config.locators)
+        self._playwright: Playwright | None = None
+        self._browser: PlaywrightBrowser | None = None
+        self._context: BrowserContext | None = None
 
-    def start(self) -> WebDriver:
-        if self.driver is not None:
-            return self.driver
-        if self.config.browser == "chrome":
-            options = webdriver.ChromeOptions()
-            if self.config.headless:
-                options.add_argument("--headless=new")
-            options.add_argument("--window-size=1440,1000")
-            self.driver = webdriver.Chrome(
-                options=options, service=ChromeService(executable_path=self.config.driver_path)
-            )
-        elif self.config.browser == "edge":
-            edge_options = webdriver.EdgeOptions()
-            if self.config.headless:
-                edge_options.add_argument("--headless=new")
-            edge_options.add_argument("--window-size=1440,1000")
-            self.driver = webdriver.Edge(
-                options=edge_options,
-                service=EdgeService(executable_path=self.config.driver_path),
-            )
-        else:
-            firefox_options = webdriver.FirefoxOptions()
-            if self.config.headless:
-                firefox_options.add_argument("-headless")
-            self.driver = webdriver.Firefox(
-                options=firefox_options,
-                service=FirefoxService(executable_path=self.config.driver_path),
-            )
-        self.driver.implicitly_wait(0)
-        self.driver.set_page_load_timeout(self.config.timeout)
-        return self.driver
+    def start(self) -> Page:
+        if self.page is not None:
+            return self.page
+        try:
+            self._playwright = sync_playwright().start()
+            if self.config.browser == "firefox":
+                self._browser = self._playwright.firefox.launch(headless=self.config.headless)
+            else:
+                channel = "chrome" if self.config.browser == "chrome" else "msedge"
+                self._browser = self._playwright.chromium.launch(
+                    channel=channel, headless=self.config.headless
+                )
+            self._context = self._browser.new_context(viewport={"width": 1440, "height": 1000})
+            self.page = self._context.new_page()
+            self.page.set_default_timeout(self.config.timeout * 1000)
+            self.page.set_default_navigation_timeout(self.config.timeout * 1000)
+            return self.page
+        except Exception:
+            self._close_after_failure()
+            raise ConfigurationError("Cannot start browser; check browser installation") from None
 
-    def login(self) -> WebDriver:
-        self.config.require_credentials()
-        driver = self.start()
-        driver.get(self.config.base_url + "/login.jsp")
-        self.assert_origin()
-        wait = WebDriverWait(driver, self.config.timeout)
-        username = self.locators.get("login.username", "#login-form-username")
-        password = self.locators.get("login.password", "#login-form-password")
-        submit = self.locators.get("login.submit", "#login-form-submit")
-        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, username))).send_keys(
-            self.config.username
-        )
-        driver.find_element(By.CSS_SELECTOR, password).send_keys(self.config.password)
-        driver.find_element(By.CSS_SELECTOR, submit).click()
-        user_menu = self.locators.get("login.success", "#header-details-user-fullname")
-        user = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, user_menu)))
-        self.assert_origin()
-        actual = user.get_attribute("data-username")
-        if actual and actual.lower() != self.config.username.lower():
-            raise ConfigurationError("Browser session is authenticated as another Jira user")
-        return driver
+    def login(self) -> Page:
+        try:
+            self.config.require_credentials()
+            page = self.start()
+            page.goto(self.config.base_url + "/login.jsp")
+            self.assert_origin()
+            username = self.locators.get("login.username", "#login-form-username")
+            password = self.locators.get("login.password", "#login-form-password")
+            submit = self.locators.get("login.submit", "#login-form-submit")
+            page.locator(f"css={username}").fill(self.config.username)
+            page.locator(f"css={password}").fill(self.config.password)
+            page.locator(f"css={submit}").click()
+            user_menu = self.locators.get("login.success", "#header-details-user-fullname")
+            user = page.locator(f"css={user_menu}")
+            user.wait_for(state="visible")
+            self.assert_origin()
+            actual = user.get_attribute("data-username")
+            if actual and actual.casefold() != self.config.username.casefold():
+                raise ConfigurationError("Browser session is authenticated as another Jira user")
+            return page
+        except (ConfigurationError, WriteBoundaryError):
+            self._close_after_failure()
+            raise
+        except Exception:
+            self._close_after_failure()
+            raise ConfigurationError(
+                "Browser login failed; check credentials and login selectors"
+            ) from None
 
     def assert_origin(self) -> None:
-        if self.driver is None:
+        if self.page is None:
             raise ConfigurationError("Browser not started")
         expected = urlsplit(self.config.base_url)
-        actual = urlsplit(self.driver.current_url)
+        actual = urlsplit(self.page.url)
         if (actual.scheme, actual.netloc) != (expected.scheme, expected.netloc):
             raise WriteBoundaryError("Browser left the configured Jira origin")
 
+    def _close_after_failure(self) -> None:
+        try:
+            self.close()
+        except ConfigurationError:
+            # Preserve the original startup/login failure after attempting all cleanup.
+            pass
+
     def close(self) -> None:
-        if self.driver is not None:
-            self.driver.quit()
-            self.driver = None
+        cleanup: list[Callable[[], None]] = []
+        for resource in (self.page, self._context, self._browser):
+            if resource is not None:
+                cleanup.append(resource.close)
+        if self._playwright is not None:
+            cleanup.append(self._playwright.stop)
+        self.page = None
+        self._context = None
+        self._browser = None
+        self._playwright = None
+        failed = False
+        for close_resource in cleanup:
+            try:
+                close_resource()
+            except Exception:
+                failed = True
+        if failed:
+            raise ConfigurationError("Cannot close all browser resources") from None

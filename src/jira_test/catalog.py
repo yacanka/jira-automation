@@ -64,6 +64,8 @@ class Catalog:
     def load(cls, path: Path) -> "Catalog":
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ConfigurationError("Invalid catalog JSON: expected an object")
             if data.get("version") != 1:
                 raise ConfigurationError("Unsupported catalog version")
             data["observations"] = [Observation(**item) for item in data["observations"]]

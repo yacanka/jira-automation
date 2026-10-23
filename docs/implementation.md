@@ -1,5 +1,8 @@
 # Uygulama kaydı
 
+Aşağıdaki ilk bölüm Selenium tabanlı ilk sürümün tarihsel kaydıdır. Güncel
+Playwright geçişi ve doğrulaması belgenin sonunda yer alır.
+
 Onaylanan plan: Jira Data Center, tek kullanıcı, ayrı test projesi, salt okunur
 explorer, Selenium + REST, YAML + Python, HTML + JSON ve öğretici örnekler.
 
@@ -38,3 +41,31 @@ raporunda listelenir. Ownership doğrulanana kadar bu kayıtlar yazılabilir kab
 Dağıtılmış wheel paketi bağımsız hedef dizine kurularak CLI validate/run kontrolü
 yapıldı. CLI pytest koşuları temiz bir subprocess içinde başlatılır; pytest plugin
 yükleme/assertion rewrite durumu CLI sürecinden taşınmaz.
+
+## Python Playwright geçişi — 2026-10-21
+
+Selenium bağımlılığı kaldırıldı; tarayıcı, UI ve alan bileşenleri senkron Python
+Playwright API'sine taşındı. Python/pytest, YAML, CLI ve rapor sözleşmeleri korundu.
+Düşük seviyeli adaptörler artık Locator alır; Browser.start/login Page döndürür.
+Chrome ve Edge kurulu tarayıcı kanallarını, Firefox Playwright sürümünü kullanır.
+Dolu driver_path açıklayıcı konfigürasyon hatası verir. REST doğrulama beklemeleri
+Selenium'dan bağımsız monotonic polling kullanır.
+
+Bağımsız incelemede bulunan native select argüman biçimi ve ekran değişiminde
+screenless transition hata kapsamının kaybolması, gerçek Chrome testleriyle
+yeniden üretildi ve düzeltildi. Boş contenteditable alanındaki tarayıcıya ait
+caret satırsonu normalize edildi. Ownership, origin, TLS ve salt okunur keşif
+sınırları korunuyor; trace/video veya kalıcı oturum kaydı eklenmedi.
+
+Doğrulama ortamı: macOS, Python 3.12.3, Playwright 1.64.0, kurulu Chrome.
+Selenium sanal ortamdan kaldırıldıktan sonra 94 birim/entegrasyon testi geçti.
+31 gerçek tarayıcı testi ve CLI üzerinden bir offline YAML demo testi geçti.
+20 YAML senaryosu doğrulandı; 6 Python örneğinin collection kontrolü geçti.
+Ruff lint/format, mypy, pip check ve sdist/wheel build başarılı.
+
+Canlı Jira, Windows/CMD, Edge ve Playwright Firefox runtime doğrulaması bu
+ortamda yapılmadı. Python 3.11 ve Playwright 1.51 alt sürümleriyle runtime
+matrisi çalıştırılmadı. Kurumsal CA/SSO politikaları ve Jira widget uyumu canlı
+ortamda kontrol edilmelidir. Önceden var olan browser-only keşifte asenkron
+project/type alan yenilenmesini kesin olarak belirleme sınırlaması sürüyor;
+UI gözlemleri REST metadatasıyla eşdeğer sayılmaz.

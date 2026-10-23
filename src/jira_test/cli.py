@@ -7,18 +7,13 @@ from dataclasses import asdict
 from pathlib import Path
 from subprocess import run as launch_pytest
 
-from selenium.common.exceptions import WebDriverException
+from playwright.sync_api import Error as PlaywrightError
 
-from .browser import Browser
-from .client import JiraClient
 from .config import Config
-from .errors import ApiError, ConfigurationError, JiraTestError, ScenarioError
-from .explorer import Explorer
+from .errors import ConfigurationError, JiraTestError, ScenarioError
 from .pytest_plugin import safe_error
-from .report import write_catalog_report
 from .scenario import load_scenarios
-from .session import JiraSession
-from .ui import JiraUI
+from .services import doctor, explore
 
 
 def suite_files(path: Path) -> list[Path]:
@@ -45,6 +40,8 @@ def validate_suite(path: Path) -> int:
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="jira-test")
     commands = root.add_subparsers(dest="command", required=True)
+    gui = commands.add_parser("gui", help="Open the Tk desktop application")
+    gui.add_argument("--workspace", type=Path, default=Path.cwd())
     doctor = commands.add_parser("doctor", help="Validate credentials and Jira capabilities")
     doctor.add_argument("--config", default="config.local.yaml")
     doctor.add_argument("--api-only", action="store_true")
@@ -69,76 +66,17 @@ def parser() -> argparse.ArgumentParser:
 
 
 def _doctor(args: argparse.Namespace) -> int:
-    config = Config.load(args.config)
-    connection = JiraSession(config)
-    try:
-        client = connection.api()
-        info = client.server_info()
-        checks: dict = {
-            "version": info.get("version"),
-            "rest_auth": True,
-            "source_project": client.project(config.source_project)["key"],
-            "test_project": client.project(config.test_project)["key"],
-            "create_metadata": bool(client.issue_types(config.test_project)),
-        }
-        permissions = client.permissions(config.test_project).get("permissions", {})
-        checks["permissions"] = {
-            key: value.get("havePermission", False) for key, value in permissions.items()
-        }
-        if not args.api_only:
-            connection.live()
-            checks["browser_auth"] = True
-        print(json.dumps(checks, ensure_ascii=False, indent=2))
-        return 0
-    finally:
-        connection.close()
+    checks = doctor(Config.load(args.config), api_only=args.api_only)
+    print(json.dumps(checks, ensure_ascii=False, indent=2))
+    return 0
 
 
 def _explore(args: argparse.Namespace) -> int:
-    config = Config.load(args.config)
-    project = args.project or config.source_project
-    if project not in {config.source_project, config.test_project}:
-        raise ConfigurationError("Explore project must be configured as source or test project")
-    config.require_credentials()
-    client = JiraClient(config)
-    browser = None
-    ui = None
-    try:
-        if not args.api_only:
-            browser = Browser(config)
-            browser.login()
-            ui = JiraUI(browser, client, readonly=True)
-        try:
-            client.current_user()
-            catalog = Explorer(config, client).discover(project, ui)
-        except ApiError as exc:
-            if args.api_only or browser is None:
-                raise
-            from .ui_discovery import discover_ui_only
-
-            catalog = discover_ui_only(config, browser, project)
-            catalog.gaps.append({"reason": safe_error(exc), "source": "api"})
-        output = args.output or Path(config.artifact_dir) / "explorer"
-        write_catalog_report(catalog, output)
-        print(
-            json.dumps(
-                {
-                    "catalog": str(output / "catalog.json"),
-                    "html": str(output / "catalog.html"),
-                    "observations": len(catalog.observations),
-                    "gaps": len(catalog.gaps),
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
-        return 0
-    finally:
-        try:
-            if browser:
-                browser.close()
-        finally:
-            client.close()
+    result = explore(
+        Config.load(args.config), project=args.project, api_only=args.api_only, output=args.output
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
 
 
 def _query(args: argparse.Namespace) -> int:
@@ -188,12 +126,16 @@ def _run(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
+        if args.command == "gui":
+            from .gui.launch import launch
+
+            return launch(args.workspace)
         if args.command == "validate":
             print(f"Validated {validate_suite(args.suite)} scenario(s)")
             return 0
         return {"doctor": _doctor, "explore": _explore, "query": _query, "run": _run}[args.command](
             args
         )
-    except (JiraTestError, WebDriverException) as exc:
+    except (JiraTestError, PlaywrightError) as exc:
         print(json.dumps({"error": safe_error(exc)}, ensure_ascii=False))
         return 2

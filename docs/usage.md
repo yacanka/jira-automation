@@ -22,9 +22,19 @@ kurumunuzun izin verdiği test hesabı/giriş yöntemi gerekir; sistem bunları 
 ## 2. Kataloğu oluşturun
 
 ```python
-main(['explore', '--config', 'config.local.yaml', '--project', 'DEMO'])
-main(['explore', '--config', 'config.local.yaml', '--project', 'AUTOTEST', '--output', 'artifacts/test-catalog'])
-main(['explore', '--config', 'config.local.yaml', '--api-only'])
+main(["explore", "--config", "config.local.yaml", "--project", "DEMO"])
+main(
+    [
+        "explore",
+        "--config",
+        "config.local.yaml",
+        "--project",
+        "AUTOTEST",
+        "--output",
+        "artifacts/test-catalog",
+    ]
+)
+main(["explore", "--config", "config.local.yaml", "--api-only"])
 ```
 
 Davranış testlerinde kullanılacak kimlikleri test projesi kataloğundan seçin.
@@ -75,6 +85,13 @@ Sayısal kimlikler string olduğu için tırnak kullanın. Test verisindeki ger�
 ise sayı olarak yazın. YAML `safe_load` eşdeğeri yüklenir; executable expression,
 Python etiketi, bilinmeyen anahtar ve duplicate key kabul edilmez.
 
+UI beklentileri (`visible`, `editable`, `required`) için senaryonun son ekranı
+açıkça açılmış olmalıdır. `submit` veya `transition` sonrasında UI kontrolü
+yapılacaksa uygun ekranı tekrar açın. `accepted` bir gönderim/geçiş gerektirir;
+`error_contains` boş olmayan metin olmalıdır. Bu hatalar çevrimdışı doğrulamada
+yakalanır. `persisted` kontrolünde `value: null`, yalnız API cevabında bulunan ve
+değeri gerçekten null olan alan için geçer; eksik alan `blocked` olarak raporlanır.
+
 ### Fixture
 
 | Anahtar | Anlamı |
@@ -106,7 +123,7 @@ fixture:
 ```
 
 API üzerinden hazırlık yapılan geçiş, test edilen geçiş değildir. Test edilen kullanıcı
-adımı Selenium üzerinden yürütülmelidir.
+adımı Playwright üzerinden yürütülmelidir.
 
 ### İşlemler
 
@@ -153,8 +170,20 @@ ve Jira dokümantasyonu üzerinden uyarlayın.
 ## 4. Çalıştırma ve sonuçlar
 
 ```python
-main(['validate', '--suite', 'my-scenarios'])
-main(['run', '--suite', 'my-scenarios', '--config', 'config.local.yaml', '--test-project', 'AUTOTEST', '--catalog', 'artifacts/test-catalog/catalog.json'])
+main(["validate", "--suite", "my-scenarios"])
+main(
+    [
+        "run",
+        "--suite",
+        "my-scenarios",
+        "--config",
+        "config.local.yaml",
+        "--test-project",
+        "AUTOTEST",
+        "--catalog",
+        "artifacts/test-catalog/catalog.json",
+    ]
+)
 ```
 
 Exit code 0 tüm toplanan testlerin geçtiğini gösterir. Engellenen YAML senaryoları pytest'te
@@ -168,3 +197,8 @@ ekranlar kullanıcı/issue verisi içerebilir; artifact erişimini kurum politik
 sınırlayın. Credential, cookie, API response body ve ham issue verisi rapora yazılmaz.
 UI locator sorunları `locators` ile, eklenti widget'ları registry adaptörüyle çözülür.
 Üçüncü taraf widget'lara otomatik olarak genel metin komponenti uygulanmaz.
+
+## Masaüstünden kullanım
+
+Aynı işlemler `python -m jira_test gui` ile açılan Tkinter arayüzünden de yapılabilir.
+[Görsel test tasarımcısı ve koşu geçmişi rehberi](gui.md).

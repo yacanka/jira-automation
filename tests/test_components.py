@@ -23,24 +23,25 @@ def test_locator_identity_is_separate_from_field_identity():
 
 
 def test_native_select_clear_uses_empty_option_value():
-    class Option:
-        def get_attribute(self, name):
-            return ""
-
-    class Selection:
-        tag_name = "select"
-
-        def get_dom_attribute(self, name):
-            return None
-
-        def find_elements(self, by, value):
-            return [Option()]
-
-    from unittest.mock import patch
+    from unittest.mock import Mock
 
     from jira_test.components import SelectField
 
-    with patch("jira_test.components.Select") as select:
-        select.return_value.options = [Option()]
-        SelectField(Selection(), None).clear()
-        select.return_value.select_by_value.assert_called_once_with("")
+    element = Mock()
+    element.evaluate.return_value = "select"
+    element.locator.return_value.count.return_value = 1
+    element.locator.return_value.first.get_attribute.return_value = ""
+    SelectField(element).clear()
+    element.select_option.assert_called_once_with(value="")
+
+
+def test_multiselect_preserves_mixed_labels_and_ids_in_one_selection():
+    from unittest.mock import Mock
+
+    from jira_test.components import MultiSelectField
+
+    element = Mock()
+    element.evaluate.return_value = "select"
+    element.locator.return_value.first.evaluate.return_value = 1
+    MultiSelectField(element).fill(["First", {"id": "2"}])
+    element.select_option.assert_called_once_with(index=[1], label=["First"])

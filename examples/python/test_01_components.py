@@ -5,7 +5,7 @@ pytest examples/python/test_01_components.py --jira-config config.local.yaml
 Beklenen: description değişikliği REST üzerinden kalıcı olarak doğrulanır.
 """
 
-from selenium.webdriver.support.ui import WebDriverWait
+from jira_test.waiting import wait_until
 
 
 def test_description_with_components(jira_session):
@@ -24,8 +24,9 @@ def test_description_with_components(jira_session):
         ui.open(screen="edit", project=config.test_project, issue_type="10001", issue=issue["key"])
         ui.fill("description", "Python ile güncellendi")
         assert ui.submit()["accepted"] is True
-        WebDriverWait(client, config.timeout).until(
-            lambda api: api.issue(issue["key"])["fields"]["description"] == "Python ile güncellendi"
+        wait_until(
+            lambda: client.issue(issue["key"])["fields"]["description"] == "Python ile güncellendi",
+            config.timeout,
         )
     finally:
         ui.cancel()

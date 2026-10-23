@@ -9,8 +9,9 @@ verify_tls: true
 artifact_dir: artifacts
 sample_limit: 100
 screenshots: false
-# Optional Windows paths; driver must match the selected browser:
-# driver_path: 'C:/Tools/msedgedriver.exe'
+# Chrome/Edge use the installed browser; Firefox: python -m playwright install firefox
+# WebDriver is no longer used: remove any legacy driver_path setting.
+# Optional corporate REST CA bundle:
 # verify_tls: 'C:/Certificates/company-ca.pem'
 # Add non-secret API values required to create test fixtures:
 default_fields: {}

@@ -6,7 +6,7 @@ Paket `src/jira_test` altında sorumluluklarına göre ayrılmıştır:
 |---|---|
 | config, errors | Ortam ayarları, güvenli hata sınıfları |
 | client | REST v2, sayfalama, çalıştırmaya ait kayıtların yazma sınırı |
-| browser, session | Selenium yaşam döngüsü ve tek hesap bağlamı |
+| browser, session | Playwright yaşam döngüsü ve tek hesap bağlamı |
 | components, ui | Alan adaptörleri ve issue işlem ekranları |
 | explorer, ui_discovery | Salt okunur API/UI keşfi ve sınırlı browser fallback |
 | catalog, report | Kaynakları ayrı tutan snapshot ve escaped HTML |
@@ -17,7 +17,7 @@ Paket `src/jira_test` altında sorumluluklarına göre ayrılmıştır:
 flowchart LR
     Config --> Session
     Session --> API[Jira REST]
-    Session --> Browser[Selenium]
+    Session --> Browser[Playwright]
     API --> Explorer
     Browser --> Components
     Components --> Explorer
@@ -64,7 +64,7 @@ uygulamasını kullanın. Basit benzerlikler için yeni inheritance katmanları 
 
 ## Davranış ve operasyon sınırları
 
-Test hazırlığı API kullanır; sınanan eylem Selenium kullanır. Geçiş koşulları,
+Test hazırlığı API kullanır; sınanan eylem Playwright kullanır. Geçiş koşulları,
 validator'lar ve farklı statüler açık senaryolarla doğrulanır. Explorer ekranları
 kaydetmeden inceler; daha önce gözlenmeyen statülere geçmek için mutasyon yapmaz.
 
@@ -77,3 +77,26 @@ silinmez; izinli temizlik ayrı bir operasyon olarak ele alınmalıdır.
 uyarlanmalıdır. Fixture hazırlık hatası kalan test kayıtlarını geri almaz; çalıştırma
 raporunda kayıtlar gösterilir. Kaynak ve test projesi eşitliği otomatik kanıtlanmaz;
 Jira yöneticisinin yapılandırma eşlemesi ve test projesi keşfi gereklidir.
+
+## Playwright yaşam döngüsü
+
+Senkron Playwright API kullanılır. Browser, ayrı BrowserContext ve Page sahipliğini
+yönetir; oturum seri çalışır ve context yeniden kullanılmaz. Locator nesneleri
+DOM yenilendiğinde elementi yeniden bulur. CSS override sözleşmesi korunur.
+Alan adaptörleri `FieldComponent(element: Locator, schema=None)` alır; Selenium
+bekleme nesnesi yoktur. UI eylemleri Playwright otomatik beklemelerini kullanır;
+REST kalıcılık ve birleşik UI/API sonuçları sınırlı, monotonic polling ile beklenir.
+Formun kaybolması başarı sayılmaz: görünür issue kimliği ve REST yazma kanıtı gerekir.
+
+## Masaüstü uygulaması
+
+`jira_test.gui.app` Tk ekranlarını birleştirir; ana thread yalnız UI olaylarını işler.
+`jobs.JobController` her işlem için taze Python worker başlatır. İlk stdin mesajı
+istek/kimlik bilgilerini, sonraki mesajlar güvenli iptal isteğini taşır; stdout JSONL
+olayları queue + `after` ile arayüze aktarılır. Aynı anda tek iş çalışır.
+
+`services` CLI ve GUI için bağlantı kontrolü/keşfi paylaşır. `pytest_bridge` mevcut
+pytest eklentisini gözlemler; koşu seçimi ve rapor bağlantıları GUI katmanındadır.
+Runner ve Explorer opsiyonel olay/iptal callback’leri sunar. CLI davranışı korunur.
+`document` Tk bağımsız doğrulama/atomik kayıt modelidir. Her koşu ayrı artifact
+klasöründe senaryo/katalog kopyaları ve kaynak bağlantılarıyla saklanır.

@@ -195,3 +195,49 @@ def test_failure_evidence_is_captured_before_leaving_form():
     with pytest.raises(AssertionError):
         runner.run(rejection_case())
     assert events == ["evidence", "cancel"]
+
+
+def test_missing_persisted_field_is_not_null():
+    from jira_test.errors import ContextUnavailable
+
+    client = MemoryClient()
+    key = client.create_issue({"description": "populated"})["key"]
+    runner = ScenarioRunner(None, client)
+    runner.issue_key = key
+    with pytest.raises(ContextUnavailable, match="not present"):
+        runner._wait_field("descripton", None)
+
+
+def test_present_null_field_is_a_valid_persisted_value():
+    client = MemoryClient()
+    key = client.create_issue({"description": None})["key"]
+    runner = ScenarioRunner(None, client)
+    runner.issue_key = key
+    runner._wait_field("description", None)
+
+
+def test_create_summary_keeps_run_marker_when_a_fixture_already_exists():
+    from unittest.mock import Mock
+
+    client = MemoryClient()
+    ui = Mock(screen="create")
+    runner = ScenarioRunner(None, client, ui)
+    runner.issue_key = client.create_issue({})["key"]
+    runner._step({"action": "fill", "field": "summary", "value": "New issue"}, rejection_case())
+    ui.fill.assert_called_once_with("summary", "[jira-test:offline-run] New issue")
+
+
+def test_open_create_detaches_previous_fixture_from_submission():
+    from unittest.mock import Mock
+
+    client = MemoryClient()
+    ui = Mock()
+    runner = ScenarioRunner(
+        Config(base_url="https://jira.test", source_project="SRC", test_project="TST"), client, ui
+    )
+    old_key = client.create_issue({})["key"]
+    runner.issue_key = old_key
+    runner._open({"screen": "create"}, rejection_case())
+    assert runner.issue_key is None
+    assert ui.open.call_args.kwargs["issue"] is None
+    assert old_key in client.records

@@ -1,13 +1,9 @@
-"""Reusable field components. Unsupported plugin widgets require an explicit adapter."""
+"""Reusable Playwright field components and explicit adapters for plugin widgets."""
 
 import re
-from typing import Any, Literal
+from typing import Any
 
-from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.support.ui import Select, WebDriverWait
+from playwright.sync_api import Locator
 
 from .errors import UnsupportedFieldError
 
@@ -31,9 +27,8 @@ class LocatorMap:
 
 
 class FieldComponent:
-    def __init__(self, element: WebElement, wait: WebDriverWait, schema: dict | None = None):
+    def __init__(self, element: Locator, schema: dict | None = None):
         self.element = element
-        self.wait = wait
         self.schema = schema or {}
 
     def fill(self, value: Any) -> None:
@@ -43,14 +38,15 @@ class FieldComponent:
         self.fill("")
 
     def read(self) -> Any:
-        return self.element.get_attribute("value")
+        return self.element.input_value()
+
+    def _is_native_select(self) -> bool:
+        return self.element.evaluate("element => element.tagName.toLowerCase()") == "select"
 
 
 class TextField(FieldComponent):
     def fill(self, value: Any) -> None:
-        self.element.clear()
-        if value is not None and str(value):
-            self.element.send_keys(str(value))
+        self.element.fill("" if value is None else str(value))
 
 
 class NumberField(TextField):
@@ -69,69 +65,72 @@ class SelectField(FieldComponent):
         if value is None or value == "":
             self.clear()
             return
-        if self.element.tag_name == "select":
-            select = Select(self.element)
+        if self._is_native_select():
             if isinstance(value, dict) and "id" in value:
-                select.select_by_value(str(value["id"]))
+                self.element.select_option(index=self._option_index(value["id"]))
             else:
-                select.select_by_visible_text(str(value))
-            return
-        # AUI autocomplete options are scoped to the active visible suggestion list.
-        self.element.clear()
-        if value in (None, ""):
-            self.element.send_keys(Keys.TAB)
+                self.element.select_option(label=str(value))
             return
         if not isinstance(value, str):
             raise UnsupportedFieldError("Autocomplete fields require the displayed option label")
-        self.element.send_keys(value)
+        self.element.fill(value)
+        # Jira portals may render suggestions outside the field's DOM container.
+        # Ignore hidden duplicates, but reject multiple visible exact matches.
+        options = self.element.page.locator(
+            '.aui-list-item a:visible, [role="option"]:visible, .select2-results li:visible'
+        ).filter(has_text=re.compile(r"^\s*" + re.escape(value) + r"\s*$"))
+        options.first.wait_for(state="visible")
+        if options.count() != 1:
+            raise UnsupportedFieldError("Ambiguous autocomplete label; override the component")
+        options.click()
 
-        def exact_option(driver: Any) -> WebElement | Literal[False]:
-            candidates = driver.find_elements(
-                By.CSS_SELECTOR, '.aui-list-item a, [role="option"], .select2-results li'
-            )
-            matches = [el for el in candidates if el.is_displayed() and el.text.strip() == value]
-            if len(matches) > 1:
-                raise UnsupportedFieldError("Ambiguous autocomplete label; override the component")
-            return matches[0] if matches else False
-
-        option = self.wait.until(exact_option)
-        option.click()
+    def _option_index(self, identity: Any) -> int:
+        # Python's value selector also matches labels. Resolve IDs explicitly so a
+        # label equal to another option's ID cannot select the wrong option.
+        option = self.element.locator(f'option[value="{css_attribute(identity)}"]').first
+        return int(option.evaluate("option => option.index"))
 
     def clear(self) -> None:
-        if self.element.tag_name == "select":
-            select = Select(self.element)
-            blanks = [
-                option.get_attribute("value")
-                for option in select.options
-                if option.get_attribute("value") in {"", "-1"}
-            ]
-            if not blanks:
+        if self._is_native_select():
+            blanks = self.element.locator('option[value=""], option[value="-1"]')
+            if not blanks.count():
                 raise UnsupportedFieldError("Select has no empty option")
-            select.select_by_value(str(blanks[0]))
+            self.element.select_option(value=blanks.first.get_attribute("value") or "")
             return
-        self.element.clear()
-        self.element.send_keys(Keys.TAB)
+        self.element.fill("")
+        self.element.press("Tab")
 
 
 class MultiSelectField(SelectField):
     def fill(self, value: Any) -> None:
         if not isinstance(value, list):
             raise UnsupportedFieldError("Multi-select fields require a list")
+        if self._is_native_select():
+            # One batch is necessary: select_option replaces the whole selection.
+            indices = [
+                self._option_index(entry["id"])
+                for entry in value
+                if isinstance(entry, dict) and "id" in entry
+            ]
+            labels = [
+                str(entry) for entry in value if not (isinstance(entry, dict) and "id" in entry)
+            ]
+            self.element.select_option(index=indices, label=labels)
+            return
         self.clear()
         for entry in value:
             super().fill(entry)
 
     def clear(self) -> None:
-        if self.element.tag_name == "select":
-            Select(self.element).deselect_all()
+        if self._is_native_select():
+            self.element.select_option([])
             return
-        container = self.element.find_element(By.XPATH, "..")
-        for button in container.find_elements(
-            By.CSS_SELECTOR, ".remove, .select2-search-choice-close"
-        ):
-            if button.is_displayed():
-                button.click()
-        self.element.clear()
+        buttons = self.element.locator("..").locator(
+            ".remove:visible, .select2-search-choice-close:visible"
+        )
+        for _ in range(buttons.count()):
+            buttons.first.click()
+        self.element.fill("")
 
 
 class UserField(SelectField):
@@ -143,7 +142,7 @@ class CheckboxField(FieldComponent):
         boxes = (
             [self.element]
             if self.element.get_attribute("type") == "checkbox"
-            else self.element.find_elements(By.CSS_SELECTOR, 'input[type="checkbox"]')
+            else self.element.locator('input[type="checkbox"]').all()
         )
         if not boxes:
             raise UnsupportedFieldError("Checkbox container has no checkbox controls")
@@ -154,43 +153,28 @@ class CheckboxField(FieldComponent):
         else:
             raise UnsupportedFieldError("Checkbox value must be boolean or a list of option IDs")
         for box, selected in zip(boxes, targets, strict=True):
-            if box.is_selected() != selected:
-                box.click()
+            box.set_checked(selected)
 
     def clear(self) -> None:
         self.fill(False if self.element.get_attribute("type") == "checkbox" else [])
 
 
 class RichTextField(TextField):
+    def _editor(self) -> Locator:
+        if self.element.evaluate("element => element.tagName.toLowerCase()") == "iframe":
+            return self.element.content_frame.locator("body")
+        return self.element
+
     def fill(self, value: Any) -> None:
-        if self.element.tag_name == "iframe":
-            driver = self.wait._driver
-            driver.switch_to.frame(self.element)
-            try:
-                body = driver.find_element(By.CSS_SELECTOR, "body")
-                body.send_keys(
-                    Keys.COMMAND
-                    if driver.capabilities.get("platformName") == "mac"
-                    else Keys.CONTROL,
-                    "a",
-                )
-                body.send_keys(Keys.BACKSPACE)
-                if value is not None:
-                    body.send_keys(str(value))
-            finally:
-                driver.switch_to.default_content()
-            return
-        if self.element.get_attribute("contenteditable") == "true":
-            self.element.send_keys(
-                Keys.COMMAND
-                if self.wait._driver.capabilities.get("platformName") == "mac"
-                else Keys.CONTROL,
-                "a",
-            )
-            self.element.send_keys(Keys.BACKSPACE)
-            self.element.send_keys(str(value or ""))
-            return
-        super().fill(value)
+        self._editor().fill("" if value is None else str(value))
+
+    def read(self) -> str:
+        editor = self._editor()
+        if editor.evaluate("element => element.isContentEditable"):
+            # Chromium leaves an empty <br> after clearing editable content;
+            # inner_text exposes that caret placeholder as a newline.
+            return editor.inner_text() if editor.text_content() else ""
+        return editor.input_value()
 
 
 class FieldRegistry:
@@ -247,19 +231,15 @@ class FieldRegistry:
         return types[schema["type"]]
 
 
-def field_label(element: WebElement, field_id: str) -> str:
-    try:
-        labels = element.find_elements(
-            By.XPATH,
-            'ancestor::*[contains(concat(" ", normalize-space(@class), " "), " field-group ")]'
-            "[1]//label",
-        )
-        return labels[0].text.strip().rstrip(" *") if labels else field_id
-    except NoSuchElementException:
-        return field_id
+def field_label(element: Locator, field_id: str) -> str:
+    labels = element.locator(
+        'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " field-group ")]'
+        "[1]//label"
+    )
+    return labels.first.inner_text().strip().rstrip(" *") if labels.count() else field_id
 
 
-def field_identity(element: WebElement) -> str | None:
+def field_identity(element: Locator) -> str | None:
     identity = element.get_attribute("id") or element.get_attribute("name") or ""
     if re.fullmatch(r"customfield_\d+", identity) or identity in {
         "summary",

@@ -46,19 +46,21 @@ class JiraSession:
         return client, self.ui
 
     def screenshot(self, name: str) -> Path | None:
-        if not self.config.screenshots or self.browser is None or self.browser.driver is None:
+        if not self.config.screenshots or self.browser is None or self.browser.page is None:
             return None
         directory = Path(self.config.artifact_dir) / "screenshots"
         directory.mkdir(parents=True, exist_ok=True)
         # The filename is controlled internally, never derived from scenario IDs or issue values.
         path = directory / name
-        self.browser.driver.save_screenshot(str(path))
+        self.browser.page.screenshot(path=str(path))
         return path
 
     def close(self) -> None:
+        browser, client = self.browser, self.client
+        self.browser, self.client, self.ui = None, None, None
         try:
-            if self.browser:
-                self.browser.close()
+            if browser:
+                browser.close()
         finally:
-            if self.client:
-                self.client.close()
+            if client:
+                client.close()

@@ -1,0 +1,16 @@
+# Amaç: API zorunluluk metadatasını doğrula
+# Jira önkoşulu: Summary create metadatası keşfedilmeli; davranış kanıtı değildir.
+# Rehber: examples/README.md
+id: required_metadata
+description: API zorunluluk metadatasını doğrula
+fixture:
+  issue_type: '10001'
+  mode: none
+  catalog: studio-demo/demo-catalog.json
+steps: []
+expect:
+- check: catalog_required
+  field: summary
+  screen: create
+  source: api
+  value: true

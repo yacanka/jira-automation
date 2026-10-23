@@ -1,17 +1,22 @@
-"""Scenario execution: API fixture preparation, Selenium actions, persisted assertions."""
+"""Scenario execution: API fixture preparation, Playwright actions, persisted assertions."""
 
 from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from selenium.webdriver.support.ui import WebDriverWait
-
 from .catalog import Catalog
 from .config import Config
 from .errors import ContextUnavailable, ScenarioError
 from .explorer import normalize_fields
 from .scenario import Scenario
+from .waiting import wait_until
+
+
+def _expect(condition: bool, message: str) -> None:
+    """Scenario expectations must also execute under python -O."""
+    if not condition:
+        raise AssertionError(message)
 
 
 def matches(actual: Any, expected: Any) -> bool:
@@ -37,9 +42,13 @@ class ScenarioRunner:
         ui: Any = None,
         catalog: Path | None = None,
         on_failure: Callable[[], Any] | None = None,
+        event_sink: Callable[[dict], None] | None = None,
+        cancel_check: Callable[[], None] | None = None,
     ):
         self.config, self.client, self.ui = config, client, ui
         self.on_failure = on_failure
+        self.event_sink = event_sink
+        self.cancel_check = cancel_check
         self.catalog_path = catalog
         self.issue_key: str | None = None
         self.parent_key: str | None = None
@@ -49,7 +58,14 @@ class ScenarioRunner:
         self.touched_fields: set[str] = set()
         self.checks: list[dict] = []
 
+    def _checkpoint(self, phase: str, scenario: Scenario, **data: Any) -> None:
+        if self.cancel_check:
+            self.cancel_check()
+        if self.event_sink:
+            self.event_sink({"phase": phase, "scenario_id": scenario.id, **data})
+
     def run(self, scenario: Scenario) -> dict:
+        self._checkpoint("scenario_start", scenario)
         self.issue_key = self.parent_key = None
         self.last_outcome = self.before = None
         self.touched_fields, self.checks = set(), []
@@ -83,11 +99,18 @@ class ScenarioRunner:
             self.client.create_fields(self.config.test_project, scenario.fixture["issue_type"])
         )
         try:
+            self._checkpoint("fixture", scenario)
             self._prepare(scenario)
-            for step in scenario.steps:
+            for position, step in enumerate(scenario.steps, 1):
+                self._checkpoint(
+                    "step",
+                    scenario,
+                    position=position,
+                    total=len(scenario.steps),
+                    action=step["action"],
+                )
                 self._step(step, scenario)
-            for expected in scenario.expect:
-                self._check(expected, scenario)
+            self._catalog_checks(scenario)
         except Exception:
             if self.on_failure:
                 self.on_failure()
@@ -117,6 +140,7 @@ class ScenarioRunner:
         if scenario.fixture.get("mode", "new") == "new":
             self.issue_key = self._create_fixture(scenario.fixture, self.parent_key)
             for hop in scenario.fixture.get("path", []):
+                self._checkpoint("fixture_transition", scenario, transition=hop["id"])
                 available = self.client.transitions(self.issue_key)
                 if not any(str(t["id"]) == hop["id"] for t in available):
                     raise ContextUnavailable("Fixture transition path is unavailable")
@@ -128,6 +152,8 @@ class ScenarioRunner:
         assert self.config is not None
         screen = step["screen"]
         if screen == "create":
+            # A new create form has no saved issue, even when a previous fixture exists.
+            self.issue_key = None
             self.ui.metadata = normalize_fields(
                 self.client.create_fields(self.config.test_project, scenario.fixture["issue_type"])
             )
@@ -186,7 +212,7 @@ class ScenarioRunner:
             self.touched_fields.add(step["field"])
             if action == "fill":
                 value = step["value"]
-                if step["field"] == "summary" and self.issue_key is None and value:
+                if step["field"] == "summary" and self.ui.screen == "create" and value:
                     value = self.client.summary(str(value))
                 self.ui.fill(step["field"], value)
             else:
@@ -208,8 +234,18 @@ class ScenarioRunner:
         if not self.issue_key:
             raise ContextUnavailable("Persisted checks need a saved issue")
         timeout = self.config.timeout if self.config else 20
-        WebDriverWait(self.client, timeout).until(
-            lambda client: matches(client.issue(self.issue_key)["fields"].get(field), expected),
+
+        def persisted() -> bool:
+            fields = self.client.issue(self.issue_key)["fields"]
+            if field not in fields:
+                raise ContextUnavailable(
+                    f"Persisted field {field} is not present in the API response"
+                )
+            return matches(fields[field], expected)
+
+        wait_until(
+            persisted,
+            timeout,
             message=f"Persisted field {field} did not reach the expected value",
         )
 
@@ -219,8 +255,8 @@ class ScenarioRunner:
             self._catalog_check(expected, scenario)
         elif check in {"visible", "editable", "required"}:
             actual = getattr(self.ui, check)(expected["field"])
-            assert actual is expected["value"], (
-                f"UI {check} assertion failed for {expected['field']}"
+            _expect(
+                actual is expected["value"], f"UI {check} assertion failed for {expected['field']}"
             )
         elif check == "accepted":
             self._accepted(expected)
@@ -234,13 +270,13 @@ class ScenarioRunner:
             actual = any(
                 str(t["id"]) == expected["id"] for t in self.client.transitions(self.issue_key)
             )
-            assert actual is expected["value"], "Transition availability assertion failed"
+            _expect(actual is expected["value"], "Transition availability assertion failed")
         self.checks.append({"check": check, "outcome": "passed"})
 
     def _accepted(self, expected: dict) -> None:
         if self.last_outcome is None:
             raise ScenarioError("accepted checks require a preceding submit/transition")
-        assert self.last_outcome["accepted"] is expected["value"], "Submission outcome mismatch"
+        _expect(self.last_outcome["accepted"] is expected["value"], "Submission outcome mismatch")
         if expected["value"]:
             return
         errors = self.last_outcome.get("errors", {})
@@ -249,19 +285,28 @@ class ScenarioRunner:
             if expected.get("field")
             else " ".join(errors.values())
         )
-        assert expected["error_contains"].casefold() in message.casefold(), (
-            "Expected validation error was not observed"
+        _expect(
+            expected["error_contains"].casefold() in message.casefold(),
+            "Expected validation error was not observed",
         )
         if self.issue_key:
             actual = self.client.issue(self.issue_key)["fields"]
-            assert actual == self.before, "Issue changed despite expected rejection"
+            _expect(actual == self.before, "Issue changed despite expected rejection")
         else:
-            assert set(self.client.run_issue_keys()) == self.before_created, (
-                "Issue was created despite expected rejection"
+            _expect(
+                set(self.client.run_issue_keys()) == self.before_created,
+                "Issue was created despite expected rejection",
             )
 
     def _catalog_checks(self, scenario: Scenario) -> None:
-        for expected in scenario.expect:
+        for position, expected in enumerate(scenario.expect, 1):
+            self._checkpoint(
+                "expect",
+                scenario,
+                position=position,
+                total=len(scenario.expect),
+                check=expected["check"],
+            )
             self._check(expected, scenario)
 
     def _catalog_check(self, expected: dict, scenario: Scenario) -> None:
@@ -281,17 +326,22 @@ class ScenarioRunner:
         if check == "catalog_exists":
             # API observation means available in metadata; UI uses observed visibility.
             values = [True if item.source == "api" else item.visible for item in observations]
-            assert all(value is expected["value"] for value in values), (
-                "Field presence differs in observed contexts"
+            _expect(
+                all(value is expected["value"] for value in values),
+                "Field presence differs in observed contexts",
             )
         elif check == "catalog_required":
             if any(item.required is None for item in observations):
                 raise ContextUnavailable("Required state unknown for this context")
-            assert all(item.required is expected["value"] for item in observations), (
-                "Required state differs in observed contexts"
+            _expect(
+                all(item.required is expected["value"] for item in observations),
+                "Required state differs in observed contexts",
             )
         else:
             target = expected["contains"]
-            assert all(
-                any(matches(option, target) for option in item.options) for item in observations
-            ), "Expected option not found in catalog"
+            _expect(
+                all(
+                    any(matches(option, target) for option in item.options) for item in observations
+                ),
+                "Expected option not found in catalog",
+            )

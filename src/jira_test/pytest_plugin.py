@@ -6,10 +6,11 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from selenium.common.exceptions import WebDriverException
+from playwright.sync_api import Error as PlaywrightError
 
 from .config import Config
 from .errors import ContextUnavailable, JiraTestError, ScenarioError, UnsupportedFieldError
+from .outcomes import final_result
 from .runner import ScenarioRunner
 from .scenario import Scenario, load_scenarios
 from .session import JiraSession
@@ -17,6 +18,13 @@ from .session import JiraSession
 SESSION = pytest.StashKey[JiraSession]()
 RESULTS = pytest.StashKey[list[dict]]()
 IDS = pytest.StashKey[set[str]]()
+# Optional observers leave CLI behavior unchanged.
+EVENT_SINK = pytest.StashKey[Any]()
+CANCEL_CHECK = pytest.StashKey[Any]()
+ARTIFACT_DIR = pytest.StashKey[Path]()
+REDACTOR = pytest.StashKey[Any]()
+PHASE_REPORTS = pytest.StashKey[list[dict]]()
+CANCELED = pytest.StashKey[Any]()
 
 
 def pytest_addoption(parser: Any) -> None:
@@ -78,9 +86,15 @@ class YamlItem(pytest.Item):
         session = None
         runner = None
         evidence: dict = {}
+        observer = {
+            "event_sink": self.config.stash.get(EVENT_SINK, None),
+            "cancel_check": self.config.stash.get(CANCEL_CHECK, None),
+        }
         try:
             if self.scenario.catalog_only:
-                runner = ScenarioRunner(None, catalog=Path(catalog) if catalog else None)
+                runner = ScenarioRunner(
+                    None, catalog=Path(catalog) if catalog else None, **observer
+                )
             else:
                 session = get_session(self.config)
                 client, ui = session.live()
@@ -90,9 +104,10 @@ class YamlItem(pytest.Item):
                     ui,
                     Path(catalog) if catalog else None,
                     on_failure=lambda: evidence.update(capture_evidence(session)),
+                    **observer,
                 )
             result = runner.run(self.scenario)
-        except (JiraTestError, AssertionError, WebDriverException) as exc:
+        except (JiraTestError, AssertionError, PlaywrightError) as exc:
             blocked = isinstance(exc, (ContextUnavailable, UnsupportedFieldError))
             result = {
                 "id": self.scenario.id,
@@ -123,7 +138,7 @@ def capture_evidence(session: JiraSession | None) -> dict:
     try:
         path = session.screenshot(uuid4().hex + ".png")
         return {"screenshot": str(path)} if path else {}
-    except WebDriverException:
+    except PlaywrightError:
         return {"evidence_error": "Browser screenshot unavailable"}
 
 
@@ -131,30 +146,67 @@ def capture_evidence(session: JiraSession | None) -> dict:
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
     outcome = yield
     report = outcome.get_result()
-    if isinstance(item, YamlItem) or SESSION not in item.config.stash:
-        return
-    if report.when == "call" or (report.when == "setup" and report.failed):
-        result = {"id": item.nodeid, "outcome": report.outcome}
-        if report.failed:
-            result.update(capture_evidence(item.config.stash[SESSION]))
-        item.config.stash[RESULTS].append(result)
+    data = {
+        "when": report.when,
+        "outcome": report.outcome,
+        "longrepr": str(report.longrepr) if report.longrepr else "",
+    }
+    if report.failed and not isinstance(item, YamlItem):
+        data.update(capture_evidence(item.config.stash.get(SESSION, None)))
+    item.stash.setdefault(PHASE_REPORTS, []).append(data)
+
+
+def execution_selector(item: pytest.Item) -> str:
+    """An executable pytest selection, including for files outside rootdir."""
+    _, separator, selection = item.nodeid.partition("::")
+    return str(item.path.resolve()) + separator + selection
+
+
+def test_identity(item: pytest.Item) -> str:
+    if isinstance(item, YamlItem):
+        return item.scenario.id
+    if not item.path.resolve().is_relative_to(item.config.rootpath.resolve()):
+        return execution_selector(item)
+    return item.nodeid
+
+
+def session_results(session: pytest.Session) -> list[dict]:
+    config = session.config
+    previous = {result["id"]: result for result in config.stash.get(RESULTS, [])}
+    canceled = config.stash.get(CANCELED, lambda: False)()
+    results = []
+    for item in session.items:
+        identity = test_identity(item)
+        base = {
+            **previous.get(identity, {}),
+            "id": identity,
+            "nodeid": item.nodeid,
+            "selector": execution_selector(item),
+        }
+        results.append(final_result(base, item.stash.get(PHASE_REPORTS, []), canceled))
+    return results
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     config = session.config
     connection = config.stash.get(SESSION, None)
     try:
-        if connection or config.getoption("--jira-suite"):
-            directory = Path(connection.config.artifact_dir if connection else "artifacts")
+        if connection or config.getoption("--jira-suite") or ARTIFACT_DIR in config.stash:
+            directory = config.stash.get(
+                ARTIFACT_DIR, Path(connection.config.artifact_dir if connection else "artifacts")
+            )
             directory.mkdir(parents=True, exist_ok=True)
             data = {
                 "run_id": connection.client.run_id if connection and connection.client else None,
                 "created_issues": connection.client.created_keys
                 if connection and connection.client
                 else [],
-                "results": config.stash.get(RESULTS, []),
+                "results": session_results(session),
                 "pytest_exitstatus": int(exitstatus),
             }
+            redactor = config.stash.get(REDACTOR, None)
+            if redactor:
+                data = redactor.data(data)
             (directory / "test-results.json").write_text(
                 json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
             )

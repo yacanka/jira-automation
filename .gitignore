@@ -13,3 +13,6 @@ artifacts/
 config.local.yaml
 .selenium/
 my-scenarios/
+.jira-test-studio/
+studio-demo/
+.DS_Store

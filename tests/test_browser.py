@@ -1,66 +1,161 @@
 from unittest.mock import Mock
 
 import pytest
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.edge.service import Service as EdgeService
-from selenium.webdriver.firefox.service import Service as FirefoxService
 
 from jira_test.browser import Browser
 from jira_test.config import Config
+from jira_test.errors import ConfigurationError, WriteBoundaryError
+
+
+def config(**kwargs):
+    return Config(base_url="https://jira.test", source_project="SRC", test_project="TST", **kwargs)
+
+
+@pytest.fixture
+def runtime(monkeypatch):
+    playwright = Mock()
+    browser = Mock()
+    context = browser.new_context.return_value
+    page = context.new_page.return_value
+    playwright.chromium.launch.return_value = browser
+    playwright.firefox.launch.return_value = browser
+    factory = Mock()
+    factory.return_value.start.return_value = playwright
+    monkeypatch.setattr("jira_test.browser.sync_playwright", factory)
+    return playwright, browser, context, page, factory
 
 
 @pytest.mark.parametrize(
-    "browser_name,constructor,options_type,service_type,headless_arg",
+    "name,engine,channel",
     [
-        ("chrome", "Chrome", webdriver.ChromeOptions, ChromeService, "--headless=new"),
-        ("firefox", "Firefox", webdriver.FirefoxOptions, FirefoxService, "-headless"),
-        ("edge", "Edge", webdriver.EdgeOptions, EdgeService, "--headless=new"),
+        ("chrome", "chromium", "chrome"),
+        ("edge", "chromium", "msedge"),
+        ("firefox", "firefox", None),
     ],
 )
 @pytest.mark.parametrize("headless", [False, True])
-@pytest.mark.parametrize("driver_path", [None, "C:/Tools/browserdriver.exe"])
-def test_start_uses_selected_browser_and_settings(
-    monkeypatch,
-    browser_name,
-    constructor,
-    options_type,
-    service_type,
-    headless_arg,
-    headless,
-    driver_path,
-):
-    # Service reserves a port even when the WebDriver process is replaced below.
-    monkeypatch.setattr("selenium.webdriver.common.utils.free_port", lambda: 45678)
-    driver = Mock()
-    factory = Mock(return_value=driver)
-    monkeypatch.setattr(webdriver, constructor, factory)
-    config = Config(
-        base_url="https://jira.test",
-        source_project="SRC",
-        test_project="TST",
-        browser=browser_name,
-        headless=headless,
-        driver_path=driver_path,
-        timeout=37,
-    )
-    browser = Browser(config)
-
-    assert browser.start() is driver
-    options = factory.call_args.kwargs["options"]
-    service = factory.call_args.kwargs["service"]
-    assert isinstance(options, options_type)
-    assert isinstance(service, service_type)
-    assert (headless_arg in options.arguments) is headless
-    if browser_name in {"chrome", "edge"}:
-        assert "--window-size=1440,1000" in options.arguments
-    if driver_path:
-        assert service.path == driver_path
-    driver.implicitly_wait.assert_called_once_with(0)
-    driver.set_page_load_timeout.assert_called_once_with(37)
-
-    assert browser.start() is driver
-    factory.assert_called_once()
+def test_start_settings_and_idempotent_close(runtime, name, engine, channel, headless):
+    playwright, native, context, page, factory = runtime
+    browser = Browser(config(browser=name, headless=headless, timeout=37))
+    assert browser.start() is page
+    assert browser.start() is page
+    expected = {"headless": headless}
+    if channel:
+        expected["channel"] = channel
+    getattr(playwright, engine).launch.assert_called_once_with(**expected)
+    native.new_context.assert_called_once_with(viewport={"width": 1440, "height": 1000})
+    page.set_default_timeout.assert_called_once_with(37000)
+    page.set_default_navigation_timeout.assert_called_once_with(37000)
+    factory.assert_called_once_with()
     browser.close()
-    driver.quit.assert_called_once()
-    assert browser.driver is None
+    browser.close()
+    for resource in (page, context, native):
+        resource.close.assert_called_once_with()
+    playwright.stop.assert_called_once_with()
+    assert browser.page is None
+
+
+@pytest.mark.parametrize("stage", ["launch", "context", "page", "timeout"])
+def test_partial_start_failure_cleans_up_and_sanitizes(runtime, stage):
+    playwright, native, context, page, _ = runtime
+    failure = {
+        "launch": playwright.chromium.launch,
+        "context": native.new_context,
+        "page": context.new_page,
+        "timeout": page.set_default_timeout,
+    }[stage]
+    failure.side_effect = RuntimeError("sensitive detail")
+    browser = Browser(config())
+    with pytest.raises(ConfigurationError, match="start") as caught:
+        browser.start()
+    assert "sensitive detail" not in str(caught.value)
+    assert caught.value.__suppress_context__
+    playwright.stop.assert_called_once()
+    if stage != "launch":
+        native.close.assert_called_once()
+    if stage in {"page", "timeout"}:
+        context.close.assert_called_once()
+    if stage == "timeout":
+        page.close.assert_called_once()
+    assert browser.page is None
+
+
+def test_close_attempts_all_resources_after_error(runtime):
+    playwright, native, context, page, _ = runtime
+    browser = Browser(config())
+    browser.start()
+    page.close.side_effect = RuntimeError("private detail")
+    with pytest.raises(ConfigurationError, match="close"):
+        browser.close()
+    context.close.assert_called_once()
+    native.close.assert_called_once()
+    playwright.stop.assert_called_once()
+    browser.close()
+
+
+def test_injected_page_login_and_custom_selectors():
+    page = Mock(url="https://jira.test/login.jsp")
+    page.locator.return_value.get_attribute.return_value = "USER"
+    browser = Browser(
+        config(username="user", password="test-only", locators={"login.username": "#custom"}),
+        page=page,
+    )
+    assert browser.login() is page
+    page.goto.assert_called_once_with("https://jira.test/login.jsp")
+    page.locator.assert_any_call("css=#custom")
+    page.locator.return_value.fill.assert_any_call("user")
+    page.locator.return_value.fill.assert_any_call("test-only")
+
+
+@pytest.mark.parametrize("failure", ["origin", "user", "interaction"])
+def test_login_failure_closes_page(failure):
+    page = Mock(url="https://jira.test/login.jsp")
+    page.locator.return_value.get_attribute.return_value = "other"
+    expected = ConfigurationError
+    if failure == "origin":
+        page.url = "https://elsewhere.test"
+        expected = WriteBoundaryError
+    elif failure == "interaction":
+        page.locator.return_value.fill.side_effect = RuntimeError("sensitive detail")
+    browser = Browser(config(username="user", password="test-only"), page=page)
+    with pytest.raises(expected) as caught:
+        browser.login()
+    assert "sensitive detail" not in str(caught.value)
+    page.close.assert_called_once()
+    if failure == "origin":
+        page.locator.assert_not_called()
+    assert browser.page is None
+
+
+def test_post_login_origin_check_prevents_accepting_external_session():
+    page = Mock(url="https://jira.test/login.jsp")
+    page.locator.return_value.click.side_effect = lambda: setattr(
+        page, "url", "https://elsewhere.test"
+    )
+    browser = Browser(config(username="user", password="test-only"), page=page)
+    with pytest.raises(WriteBoundaryError):
+        browser.login()
+    page.locator.return_value.get_attribute.assert_not_called()
+    page.close.assert_called_once()
+
+
+def test_login_cleanup_failure_preserves_original_boundary_error():
+    page = Mock(url="https://elsewhere.test")
+    page.close.side_effect = RuntimeError("private detail")
+    browser = Browser(config(username="user", password="test-only"), page=page)
+    with pytest.raises(WriteBoundaryError):
+        browser.login()
+    assert browser.page is None
+
+
+def test_start_can_retry_after_partial_failure(runtime):
+    playwright, native, context, page, factory = runtime
+    context.new_page.side_effect = RuntimeError("synthetic failure")
+    browser = Browser(config())
+    with pytest.raises(ConfigurationError):
+        browser.start()
+    context.new_page.side_effect = None
+    assert browser.start() is page
+    assert factory.call_count == 2
+    browser.close()
+    assert playwright.stop.call_count == 2

@@ -3,3 +3,7 @@ include run-demo.bat
 recursive-include docs *.md
 recursive-include examples *.md *.yaml *.json *.py
 include tests/browser_smoke.py
+
+include run-gui.bat
+include tests/gui_*smoke.py
+include tests/browser_ui_smoke.py

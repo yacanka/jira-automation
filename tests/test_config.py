@@ -60,3 +60,33 @@ def test_empty_ca_path_cannot_disable_tls(verify):
             test_project="TST",
             verify_tls=verify,
         )
+
+
+@pytest.mark.parametrize("driver_path", [None, ""])
+def test_empty_legacy_driver_path_loads(tmp_path, driver_path):
+    path = tmp_path / "config.yaml"
+    value = "null" if driver_path is None else "''"
+    path.write_text(
+        "base_url: https://jira.test\nsource_project: SRC\ntest_project: TST\n"
+        + f"driver_path: {value}\n"
+    )
+    assert Config.load(path).driver_path == driver_path
+
+
+@pytest.mark.parametrize("driver_path", ["/path/to/driver", " ", 1])
+def test_nonempty_legacy_driver_path_rejected(driver_path):
+    with pytest.raises(ConfigurationError, match="driver_path"):
+        Config(
+            base_url="https://jira.test",
+            source_project="SRC",
+            test_project="TST",
+            driver_path=driver_path,
+        )
+
+
+@pytest.mark.parametrize("timeout", [float("nan"), float("inf"), float("-inf")])
+def test_timeout_must_be_finite(timeout):
+    with pytest.raises(ConfigurationError, match="finite"):
+        Config(
+            base_url="https://jira.test", source_project="SRC", test_project="TST", timeout=timeout
+        )

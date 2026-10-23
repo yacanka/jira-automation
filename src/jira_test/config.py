@@ -1,5 +1,6 @@
 """Non-secret YAML configuration; credentials come exclusively from the environment."""
 
+import math
 import os
 import re
 from dataclasses import dataclass, field
@@ -46,8 +47,16 @@ class Config:
             raise ConfigurationError("Source and test projects must be different")
         if self.browser not in {"chrome", "firefox", "edge"}:
             raise ConfigurationError("browser must be chrome, firefox or edge")
-        if not isinstance(self.timeout, (int, float)) or self.timeout <= 0:
-            raise ConfigurationError("timeout must be positive")
+        if (
+            not isinstance(self.timeout, (int, float))
+            or not math.isfinite(self.timeout)
+            or self.timeout <= 0
+        ):
+            raise ConfigurationError("timeout must be positive and finite")
+        if self.driver_path not in (None, ""):
+            raise ConfigurationError(
+                "driver_path is unsupported by Playwright; remove this setting"
+            )
         if not isinstance(self.sample_limit, int) or self.sample_limit < 1:
             raise ConfigurationError("sample_limit must be a positive integer")
         if self.verify_tls is False or not isinstance(self.verify_tls, (bool, str)):
